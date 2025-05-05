@@ -1,1 +1,0 @@
-//Maliyet modeli

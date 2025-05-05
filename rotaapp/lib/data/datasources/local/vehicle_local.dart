@@ -1,1 +1,0 @@
-//Araç yerel verisi

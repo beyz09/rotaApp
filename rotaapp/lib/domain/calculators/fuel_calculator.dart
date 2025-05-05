@@ -1,1 +1,0 @@
-//Yakıt hesaplayıcı

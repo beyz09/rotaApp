@@ -1,1 +1,0 @@
-//Ücretli geçiş deposu
