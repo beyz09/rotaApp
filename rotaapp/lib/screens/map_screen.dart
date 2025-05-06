@@ -17,11 +17,13 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
 
 // Kendi modellerimizi import ediyoruz
 import '../models/location_result.dart';
 import '../models/route_option.dart';
 import '../models/vehicle.dart'; // Eğer Vehicle modelin varsa
+import '../models/fuel_cost_calculator.dart';
 // Kendi provider'ımızı import ediyoruz
 import '../providers/route_provider.dart';
 import '../providers/vehicle_provider.dart'; // Eğer VehicleProvider'ın varsa
@@ -252,9 +254,6 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<List<RouteOption>> _fetchRouteOptions(LatLng start, LatLng end) async {
-    // Bu metod API çağrısını yapacak ve RouteOption listesi döndürecek.
-    // Service katmanına taşınabilir.
-
     try {
       final url = Uri.parse(
         'http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson&alternatives=true',
@@ -267,6 +266,24 @@ class _MapScreenState extends State<MapScreen> {
 
         if (data['routes'] != null && data['routes'].isNotEmpty) {
           final List<RouteOption> routeOptions = [];
+          final vehicleProvider = Provider.of<VehicleProvider>(
+            context,
+            listen: false,
+          );
+          final selectedVehicle = vehicleProvider.selectedVehicle;
+
+          if (selectedVehicle == null) {
+            throw Exception('Lütfen önce bir araç seçin');
+          }
+
+          // Yakıt maliyeti hesaplayıcıyı oluştur
+          final calculator = FuelCostCalculator(
+            vehicle: selectedVehicle,
+            fuelPricePerLiter: _sampleFuelPricePerLiter,
+            // Şehir içi yüzdesini rota özelliklerine göre belirle
+            cityPercentage:
+                50.0, // Varsayılan değer, daha sonra rota özelliklerine göre güncellenebilir
+          );
 
           for (var i = 0; i < data['routes'].length; i++) {
             final route = data['routes'][i];
@@ -288,7 +305,7 @@ class _MapScreenState extends State<MapScreen> {
                     .cast<LatLng>()
                     .toList();
 
-            if (points.isEmpty) continue; // Geçersiz rota
+            if (points.isEmpty) continue;
 
             final double distanceInMeters =
                 (route['distance'] as num?)?.toDouble() ?? 0.0;
@@ -298,40 +315,31 @@ class _MapScreenState extends State<MapScreen> {
             final distance = (distanceInMeters / 1000).toStringAsFixed(1);
             final durationInMinutes = (durationInSeconds / 60).round();
 
-            // Yakıt maliyeti hesaplama (Çok basit bir örnek)
-            // Ortalama yakıt tüketimi kullanılabilir veya seçili araç bilgisi
-            final vehicleProvider = Provider.of<VehicleProvider>(
-              context,
-              listen: false,
+            // Detaylı rota bilgilerini hesapla
+            final routeDetails = calculator.calculateRouteDetails(
+              distanceInMeters / 1000,
             );
-            final selectedVehicle = vehicleProvider.selectedVehicle;
-            double? routeCost;
 
-            if (selectedVehicle != null) {
-              // Şehir içi/dışı oranına göre ortalama tüketim veya OSRM'in hız profili kullanılabilir.
-              // Şimdilik basitçe şehir dışı tüketimi kullanalım.
-              final double consumptionPerKm =
-                  selectedVehicle.highwayConsumption / 100; // L/km
-              final double totalFuelNeeded =
-                  (distanceInMeters / 1000) * consumptionPerKm; // Litre
-              routeCost =
-                  totalFuelNeeded * _sampleFuelPricePerLiter; // Toplam maliyet
-            }
+            // Maliyet aralığını hesapla
+            final costRange = calculator.calculateRouteCost(
+              distanceInMeters / 1000,
+            );
 
             routeOptions.add(
               RouteOption(
                 name: i == 0 ? 'En Hızlı Rota' : 'Alternatif Rota ${i + 1}',
                 distance: '$distance km',
                 duration: '$durationInMinutes dk',
-                isTollRoad: false, // OSRM toll bilgisini net vermez
+                isTollRoad: false,
                 points: points,
-                cost: routeCost, // Hesaplanan maliyeti ekle
+                costRange: costRange,
+                routeDetails: routeDetails,
               ),
             );
           }
-          return routeOptions; // Rota seçeneklerini döndür
+          return routeOptions;
         } else {
-          return []; // Rota bulunamadı
+          return [];
         }
       } else {
         debugPrint(
@@ -886,12 +894,6 @@ class _MapScreenState extends State<MapScreen> {
               '${_startController.text} - ${_endController.text}',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 4),
-            // Başlangıç ve Bitiş adresleri (Daha detaylı isimler)
-            Text(
-              'Başlangıç Adresi\nVarış Adresi',
-              style: TextStyle(fontSize: 14),
-            ), // Placeholder
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -935,16 +937,16 @@ class _MapScreenState extends State<MapScreen> {
                       'Maliyet',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                    // Maliyet null ise '-' göster
+                    // Maliyet aralığını göster
                     Text(
-                      route.cost != null
-                          ? '${route.cost!.toStringAsFixed(2)}\$'
+                      route.costRange != null
+                          ? '${route.costRange!['minCost']!.toStringAsFixed(2)} - ${route.costRange!['maxCost']!.toStringAsFixed(2)} ₺'
                           : '-',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color:
-                            route.cost != null
+                            route.costRange != null
                                 ? Theme.of(context).colorScheme.primary
                                 : Colors.grey,
                       ),
@@ -952,6 +954,39 @@ class _MapScreenState extends State<MapScreen> {
                   ],
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+            // Yolculuğa Başla Butonu
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  final routeProvider = Provider.of<RouteProvider>(
+                    context,
+                    listen: false,
+                  );
+                  final start = routeProvider.startLocation;
+                  final end = routeProvider.endLocation;
+
+                  if (start != null && end != null) {
+                    // Varsayılan harita uygulamasını aç
+                    final url = Uri.parse(
+                      'https://www.google.com/maps/dir/?api=1&origin=${start.latitude},${start.longitude}&destination=${end.latitude},${end.longitude}&travelmode=driving',
+                    );
+                    launchUrl(url, mode: LaunchMode.externalApplication);
+                  }
+                },
+                icon: const Icon(Icons.directions_car),
+                label: const Text('Yolculuğa Başla'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
             ),
           ],
         ),

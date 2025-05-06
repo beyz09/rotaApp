@@ -6,8 +6,8 @@ class RouteOption {
   final String duration;
   final bool isTollRoad;
   final List<LatLng> points;
-  // Figma'daki maliyet bilgisi için eklenebilir
-  final double? cost; // double? null olabilir
+  final Map<String, double>? costRange;
+  final Map<String, dynamic>? routeDetails;
 
   RouteOption({
     required this.name,
@@ -15,6 +15,15 @@ class RouteOption {
     required this.duration,
     required this.isTollRoad,
     required this.points,
-    this.cost, // Maliyet opsiyonel
+    this.costRange,
+    this.routeDetails,
   });
+
+  double get distanceInKm {
+    return double.parse(distance.replaceAll(' km', ''));
+  }
+
+  int get durationInMinutes {
+    return int.parse(duration.replaceAll(' dk', ''));
+  }
 }
