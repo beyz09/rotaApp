@@ -54,7 +54,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
     final vehicleProvider = Provider.of<VehicleProvider>(context);
     final selectedVehicle = vehicleProvider.selectedVehicle;
 
-    final Color backgroundColor = Color(0xFFDCF0D8); // Figma'daki yeşil tonu
+    const Color backgroundColor = Color(0xFFDCF0D8); // Figma'daki yeşil tonu
 
     return Scaffold(
       backgroundColor: backgroundColor, // Arka plan rengi
@@ -99,7 +99,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      const Text(
                         'Araç bilgisi yok.',
                         style: TextStyle(fontSize: 16, color: Colors.grey),
                       ),
@@ -111,13 +111,13 @@ class _VehicleScreenState extends State<VehicleScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => AddVehicleScreen(),
+                              builder: (context) => const AddVehicleScreen(),
                             ),
                           );
                         },
-                        child: Icon(Icons.add),
                         backgroundColor:
-                            Theme.of(context).colorScheme.primary, // Tema rengi
+                            Theme.of(context).colorScheme.primary,
+                        child: Icon(Icons.add), // Tema rengi
                       ),
                     ],
                   ),
@@ -218,8 +218,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '${vehicle.fuelType}',
-                    style: TextStyle(fontSize: 15, color: Colors.black87),
+                    vehicle.fuelType,
+                    style: const TextStyle(fontSize: 15, color: Colors.black87),
                   ),
                 ],
               ),
@@ -230,7 +230,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
                   const SizedBox(width: 4),
                   Text(
                     'Şehir içi: ${vehicle.cityConsumption}L/100km',
-                    style: TextStyle(fontSize: 15, color: Colors.black87),
+                    style: const TextStyle(fontSize: 15, color: Colors.black87),
                   ),
                 ],
               ),
@@ -241,7 +241,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
                   const SizedBox(width: 4),
                   Text(
                     'Şehir dışı: ${vehicle.highwayConsumption}L/100km',
-                    style: TextStyle(fontSize: 15, color: Colors.black87),
+                    style: const TextStyle(fontSize: 15, color: Colors.black87),
                   ),
                 ],
               ),
@@ -251,8 +251,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: ElevatedButton(
-                    onPressed: null, // Pasif buton
-                    child: const Text('Seçildi'),
+                    onPressed: null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor:
                           Theme.of(context).colorScheme.primary, // Tema rengi
@@ -260,7 +259,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
-                    ),
+                    ), // Pasif buton
+                    child: const Text('Seçildi'),
                   ),
                 ),
             ],

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+// Ekranlarınızı ve provider'larınızı import edin
 import 'screens/map_screen.dart';
 import 'screens/vehicle_screen.dart';
 import 'screens/profile_screen.dart';
@@ -8,10 +10,12 @@ import 'providers/route_provider.dart';
 import 'providers/vehicle_provider.dart';
 import 'providers/auth_provider.dart'; // İsteğe bağlı
 
+// SplashScreen widget'ını import edin
+import 'package:rotaapp/splash_screen.dart'; // <<-- splash_screen.dart dosyasının yolunu doğru ayarlayın
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(
-    // Birden fazla Provider kullanmak için MultiProvider kullanın
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => RouteProvider()),
@@ -40,12 +44,14 @@ class MyApp extends StatelessWidget {
         ), // Figma'daki yeşil tona yakın
         useMaterial3: true,
       ),
-      home: MainScreenWrapper(), // Ana ekran yöneticisi
+      // UYGULAMA BAŞLANGICINDA İLK GÖSTERİLECEK EKRAN ARTIK SPLASHSCREEN
+      home: const SplashScreen(), // <<-- Burası SplashScreen oldu
     );
   }
 }
 
 // Bottom Navigation Bar ve Ekran Geçişlerini Yöneten Widget
+// Bu widget artık splash screen'den sonra Navigator ile açılacak
 class MainScreenWrapper extends StatefulWidget {
   const MainScreenWrapper({super.key});
 
@@ -73,14 +79,9 @@ class _MainScreenWrapperState extends State<MainScreenWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    // Figma'daki genel yeşil arka plan rengini alalım (utils/app_colors.dart'a taşınabilir)
-    final Color overallBackgroundColor = Color(0xFFDCF0D8);
+    const Color overallBackgroundColor = Color(0xFFDCF0D8);
 
     return Scaffold(
-      // AppBar burada değil, her ekranda kendi AppBar'ı veya içeriği olacak (Stack içinde)
-      // Eğer Figma'daki üst kısım (Konum arayın vs.) tüm map sayfasının AppBar'ı gibiyse, o MapScreen'in kendi içinde kalacak.
-      // Eğer tüm uygulamanın tek bir AppBar'ı olacaksa, o buraya taşınır ve her ekran widget'ı sadece içeriği olur.
-      // Figma'ya göre AppBar benzeri yapı MapScreen'in içinde gibi duruyor. Home dahil.
       body: Center(
         child: _screens.elementAt(_selectedIndex), // Seçili ekranı göster
       ),

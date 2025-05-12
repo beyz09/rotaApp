@@ -7,7 +7,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color backgroundColor = Color(0xFFDCF0D8); // Figma'daki yeşil tonu
+    const Color backgroundColor = Color(0xFFDCF0D8); // Figma'daki yeşil tonu
     final authProvider = Provider.of<AuthProvider>(context);
 
     return Scaffold(

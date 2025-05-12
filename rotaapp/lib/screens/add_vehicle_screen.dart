@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/vehicle_provider.dart';
 import '../models/vehicle.dart';
-import 'package:uuid/uuid.dart'; // uuid paketi eklenmeli: flutter pub add uuid
-import 'package:flutter/services.dart';
+// uuid paketi eklenmeli: flutter pub add uuid
 
 class AddVehicleScreen extends StatefulWidget {
   const AddVehicleScreen({super.key});

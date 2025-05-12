@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/vehicle.dart'; // Model import edildi
 
 class VehicleProvider extends ChangeNotifier {
-  List<Vehicle> _vehicles = []; // Kayıtlı araçlar listesi
+  final List<Vehicle> _vehicles = []; // Kayıtlı araçlar listesi
   Vehicle? _selectedVehicle; // Seçili araç
 
   List<Vehicle> get vehicles => _vehicles;

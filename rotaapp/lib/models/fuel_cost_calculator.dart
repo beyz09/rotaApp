@@ -1,4 +1,4 @@
-import 'package:latlong2/latlong.dart';
+// lib/models/fuel_cost_calculator.dart
 import 'vehicle.dart';
 
 class FuelCostCalculator {
@@ -13,31 +13,47 @@ class FuelCostCalculator {
   });
 
   // Rota maliyetini hesapla (min ve max değerler)
-  Map<String, double> calculateRouteCost(double distanceInKm) {
+  // additionalTollCost: Yakıt maliyetine ek olarak sabit ücretli yol maliyeti (TL)
+  Map<String, double> calculateRouteCost(
+    double distanceInKm, {
+    double additionalTollCost = 0.0,
+  }) {
     // Şehir içi ve şehir dışı mesafeleri hesapla
     final double cityDistance = (distanceInKm * cityPercentage) / 100;
     final double highwayDistance = distanceInKm - cityDistance;
 
     // Şehir içi ve şehir dışı yakıt tüketimlerini hesapla
     final double cityFuelConsumption =
-        (cityDistance * vehicle.cityConsumption) / 100;
+        (cityDistance * vehicle.cityConsumption) / 100; // litre
     final double highwayFuelConsumption =
-        (highwayDistance * vehicle.highwayConsumption) / 100;
+        (highwayDistance * vehicle.highwayConsumption) / 100; // litre
 
-    // Toplam yakıt tüketimi
+    // Toplam yakıt tüketimi (litre)
     final double totalFuelConsumption =
         cityFuelConsumption + highwayFuelConsumption;
 
-    // Minimum ve maksimum maliyet hesaplama (%10 sapma ile)
-    final double baseCost = totalFuelConsumption * fuelPricePerLiter;
-    final double minCost = baseCost * 0.9; // %10 daha az
-    final double maxCost = baseCost * 1.1; // %10 daha fazla
+    // Temel yakıt maliyeti (TL)
+    final double baseFuelCost = totalFuelConsumption * fuelPricePerLiter;
 
-    return {'minCost': minCost, 'maxCost': maxCost};
+    // Toplam temel maliyet (yakıt + ek maliyet)
+    final double baseTotalCost = baseFuelCost + additionalTollCost;
+
+    // Minimum ve maksimum maliyet hesaplama (%10 sapma ile)
+    // Sapmayı sadece yakıt maliyetine uygulayabiliriz veya toplam maliyete.
+    // Toplam maliyete uygulayalım, daha basit.
+    final double minCost = baseTotalCost * 0.9; // %10 daha az
+    final double maxCost = baseTotalCost * 1.1; // %10 daha fazla
+
+    // Maliyetin negatif olmamasına dikkat et
+    return {'minCost': minCost > 0 ? minCost : 0.0, 'maxCost': maxCost > 0 ? maxCost : 0.0};
   }
 
   // Rota detaylarını hesapla
-  Map<String, dynamic> calculateRouteDetails(double distanceInKm) {
+  // additionalTollCost: Yakıt maliyetine ek olarak sabit ücretli yol maliyeti (TL)
+  Map<String, dynamic> calculateRouteDetails(
+    double distanceInKm, {
+    double additionalTollCost = 0.0,
+  }) {
     final double cityDistance = (distanceInKm * cityPercentage) / 100;
     final double highwayDistance = distanceInKm - cityDistance;
 
@@ -49,9 +65,11 @@ class FuelCostCalculator {
     final double totalFuelConsumption =
         cityFuelConsumption + highwayFuelConsumption;
 
-    final double baseCost = totalFuelConsumption * fuelPricePerLiter;
-    final double minCost = baseCost * 0.9;
-    final double maxCost = baseCost * 1.1;
+    final double baseFuelCost = totalFuelConsumption * fuelPricePerLiter;
+    final double baseTotalCost = baseFuelCost + additionalTollCost;
+
+    final double minCost = baseTotalCost * 0.9;
+    final double maxCost = baseTotalCost * 1.1;
 
     return {
       'totalDistance': distanceInKm,
@@ -60,8 +78,9 @@ class FuelCostCalculator {
       'cityFuelConsumption': cityFuelConsumption,
       'highwayFuelConsumption': highwayFuelConsumption,
       'totalFuelConsumption': totalFuelConsumption,
-      'minCost': minCost,
-      'maxCost': maxCost,
+      'minCost': minCost > 0 ? minCost : 0.0,
+      'maxCost': maxCost > 0 ? maxCost : 0.0,
+      'additionalTollCost': additionalTollCost, // Ek ücretli yol maliyetini de detaylara ekleyelim
     };
   }
 }
