@@ -33,6 +33,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
             fuelType: 'Benzin',
             cityConsumption: 7.2,
             highwayConsumption: 5.1,
+            vehicleType: 1,
           ),
         );
         vehicleProvider.addVehicle(
@@ -43,6 +44,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
             fuelType: 'Dizel',
             cityConsumption: 6.0,
             highwayConsumption: 4.5,
+            vehicleType: 1,
           ),
         );
       }
@@ -117,7 +119,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
                         },
                         backgroundColor:
                             Theme.of(context).colorScheme.primary,
-                        child: Icon(Icons.add), // Tema rengi
+                        child: const Icon(Icons.add), // Tema rengi
                       ),
                     ],
                   ),

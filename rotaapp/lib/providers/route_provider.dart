@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route_option.dart';
 import '../models/vehicle.dart'; // CompletedRoute için Vehicle modeli gerekebilir
-import '../models/fuel_cost_calculator.dart'; // CompletedRoute için FuelCostCalculator modeli gerekebilir
+// CompletedRoute için FuelCostCalculator modeli gerekebilir
 
 
 // Tamamlanan rota modeli (Önceki kodunuzda vardı)
@@ -37,7 +37,7 @@ class RouteProvider extends ChangeNotifier {
   final List<CompletedRoute> _completedRoutes = [];
 
   // Getterlar
-  List<Vehicle> _vehicles = []; // VehicleProvider'dan gelen örnek liste, MapScreen'de Provider.of ile alınıyor ama burada da tutulabilir eğer ihtiyacı olursa
+  final List<Vehicle> _vehicles = []; // VehicleProvider'dan gelen örnek liste, MapScreen'de Provider.of ile alınıyor ama burada da tutulabilir eğer ihtiyacı olursa
 
   // Getterlar
   List<CompletedRoute> get completedRoutes => _completedRoutes;

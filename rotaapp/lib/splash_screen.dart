@@ -143,7 +143,7 @@ class _SplashScreenState extends State<SplashScreen> {
         height: double.infinity,
         // Arka plan rengini kaldırıp, decoration ekliyoruz
         // color: Colors.white, // Bunu kaldırın
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           image: DecorationImage(
             image: AssetImage('assets/images/arkaplan1.png'), // Arka plan resmi
             fit: BoxFit.cover, // Resmi ekranı kaplayacak şekilde ölçekle

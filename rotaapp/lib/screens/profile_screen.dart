@@ -7,8 +7,8 @@ import '../providers/vehicle_provider.dart';
 import '../providers/route_provider.dart';
 
 // Model importları (CompletedRoute ve Vehicle modellerine buradan erişiliyor)
-import '../models/vehicle.dart'; // Vehicle modelini import edin (Ortalama tüketim için)
-import '../models/route_option.dart'; // CompletedRoute buradan türetilmiş veya ilgili
+// Vehicle modelini import edin (Ortalama tüketim için)
+// CompletedRoute buradan türetilmiş veya ilgili
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});

@@ -7,6 +7,8 @@ class Vehicle {
   final double highwayConsumption; // Şehir dışı yakıt tüketimi (L/100km)
   // Başka özellikler eklenebilir (Yıl, Motor vb.)
 
+  final int vehicleType; // Araç türü (1-6 arasında)
+  
   Vehicle({
     required this.id,
     required this.brand,
@@ -14,5 +16,6 @@ class Vehicle {
     required this.fuelType,
     required this.cityConsumption,
     required this.highwayConsumption,
+    required this.vehicleType, // Yeni özellik
   });
 }

@@ -1,25 +1,30 @@
+// lib/screens/map_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' as l;
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter/scheduler.dart'; // Needed for TickerMode.disable
+import 'package:flutter/scheduler.dart'; // Keep for initial map move
+import 'package:flutter/foundation.dart'; // Import for debugPrint
 
-// Kendi modellerimizi import ediyoruz
 import '../models/location_result.dart';
 import '../models/route_option.dart';
 import '../models/fuel_cost_calculator.dart';
 import '../models/vehicle.dart';
+import '../models/route_step.dart';
+import '../data/predefined_tolls.dart'; // Keep for toll calculation
 import '../providers/route_provider.dart';
 import '../providers/vehicle_provider.dart';
 
-// Enum Tanımı
+// Enum to manage the content type of the bottom sheet
 enum SheetType {
-  none,
-  searchResults,
-  routeOptions,
+  none, // Sheet is hidden or showing only a loader temporarily
+  searchResults, // Showing location search results
+  routeOptions, // Showing calculated route options and details
 }
 
 class MapScreen extends StatefulWidget {
@@ -29,514 +34,924 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> with AutomaticKeepAliveClientMixin {
+class _MapScreenState extends State<MapScreen> {
+  // State Variables
+  bool _isCalculatingRoute = false; // Tracks if OSRM call is in progress
+  bool _isSearchingLocation =
+      false; // Tracks if Nominatim search is in progress
+  SheetType _currentSheet = SheetType.none;
+  List<LocationResult> _searchResults = []; // Single list for search results
+  bool _isStartSearchActive =
+      true; // Tracks which input field's search is active
+  bool _showRouteStepsDetails =
+      false; // Controls visibility of step-by-step directions
 
-  @override
-  bool get wantKeepAlive => true;
-
-  bool _isCalculatingRoute = false;
+  // Controllers and Nodes
   final MapController _mapController = MapController();
-
   final TextEditingController _startController = TextEditingController();
   final TextEditingController _endController = TextEditingController();
-
-  SheetType _currentSheet = SheetType.none;
-
-  List<LocationResult> _startSearchResults = [];
-  List<LocationResult> _endSearchResults = [];
-
   final FocusNode _startFocusNode = FocusNode();
   final FocusNode _endFocusNode = FocusNode();
 
-  static const String turkeyViewBox = '25.5,35.5,45.0,42.0';
-  double _sampleFuelPricePerLiter = 42.0;
-  static const double _fixedTollCostPlaceholder = 75.0;
-
-  // DraggableSheetController ekleyelim (İsteğe bağlı ama sheet'i kontrol etmek için faydalı)
-  // DraggableScrollableController _sheetController = DraggableScrollableController();
-
+  // Constants and Helpers
+  static const String turkeyViewBox =
+      '25.5,35.5,45.0,42.0'; // Limit Nominatim search
+  final double _sampleFuelPricePerLiter =
+      42.0; // TODO: Fetch from external source/config
+  final l.Distance _distanceCalculator = const l.Distance();
+  static const double _gateMatchThresholdMeters =
+      15000; // Increased to 15km for testing
 
   @override
   void initState() {
     super.initState();
-
-    _startFocusNode.addListener(_handleFocusChange);
-    _endFocusNode.addListener(_handleFocusChange);
+    _startFocusNode.addListener(_onFocusChange);
+    _endFocusNode.addListener(_onFocusChange);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-       final routeProvider = Provider.of<RouteProvider>(context, listen: false);
-       if (routeProvider.startLocation != null && _startController.text.isEmpty) {
-         _startController.text = 'Mevcut Konum';
-         if (mounted) {
-            _mapController.move(routeProvider.startLocation!, 13);
-         }
-       }
+      final routeProvider = Provider.of<RouteProvider>(context, listen: false);
+      if (routeProvider.startLocation != null &&
+          _startController.text.isEmpty) {
+        _startController.text = 'Mevcut Konum';
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            try {
+              _mapController.move(routeProvider.startLocation!, 13);
+            } catch (e) {/* Silent error */}
+          }
+        });
+      }
     });
   }
 
-  Future<List<LocationResult>> _fetchLocationSearchResults(String query) async {
-    if (query.isEmpty) {
-      return [];
-    }
-     try {
-      final url = Uri.parse('https://nominatim.openstreetmap.org/search?format=json&q=$query&limit=10&viewbox=$turkeyViewBox&accept-language=tr');
-      final response = await http.get(url, headers: {'User-Agent': 'FuelEstimateApp/1.0'});
-      if (response.statusCode == 200) {
-        final List<dynamic> results = json.decode(response.body);
-        return results
-            .map((result) {
-              final double? lat = double.tryParse(result['lat']?.toString() ?? '');
-              final double? lon = double.tryParse(result['lon']?.toString() ?? '');
-              final String displayName = result['display_name']?.toString() ?? '';
-              if (lat == null || lon == null || displayName.isEmpty) {
-                 return null;
-              }
-              return LocationResult(displayName: displayName, coordinates: LatLng(lat, lon), type: result['type']?.toString() ?? '');
-            })
-            .where((loc) => loc != null)
-            .cast<LocationResult>()
-            .toList();
-      } else {
-        debugPrint('Arama API hatası: ${response.statusCode} - ${response.body}');
-        return [];
+  @override
+  void dispose() {
+    _startFocusNode.removeListener(_onFocusChange);
+    _endFocusNode.removeListener(_onFocusChange);
+    _startFocusNode.dispose();
+    _endFocusNode.dispose();
+    _startController.dispose();
+    _endController.dispose();
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!_startFocusNode.hasFocus && !_endFocusNode.hasFocus) {
+      if (_currentSheet == SheetType.searchResults && mounted) {
+        setState(() {
+          _currentSheet = SheetType.none;
+          _searchResults = [];
+        });
       }
-    } catch (e) {
-      debugPrint('Arama sırasında network veya parse hatası: $e');
-      return [];
+    } else {
+      if (mounted) {
+        setState(() {
+          _isStartSearchActive = _startFocusNode.hasFocus;
+          if (_currentSheet == SheetType.searchResults) {
+            _searchResults = [];
+          }
+        });
+      }
     }
   }
 
-  void _selectLocation(LocationResult location, bool isStart) {
-    final controller = isStart ? _startController : _endController;
-    controller.text = location.displayName;
+  Future<void> _performSearch(String query) async {
+    final routeProvider = Provider.of<RouteProvider>(context, listen: false);
+    final bool isStart = _isStartSearchActive;
+
+    if (isStart && query.trim().toLowerCase() == 'mevcut konum') {
+      final currentLocation = routeProvider.startLocation;
+      if (currentLocation != null) {
+        _startController.text = 'Mevcut Konum';
+        routeProvider.setStartLocation(currentLocation);
+        _startFocusNode.unfocus();
+        if (mounted) {
+          setState(() {
+            _searchResults = [];
+            _currentSheet = SheetType.none;
+          });
+          try {
+            _mapController.move(currentLocation, 13);
+          } catch (_) {}
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Mevcut konum bilgisi alınamadı.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+      return;
+    }
+
+    if (query.trim().isEmpty) {
+      if (mounted) {
+        setState(() {
+          _searchResults = [];
+          _isSearchingLocation = false;
+          if (_currentSheet == SheetType.searchResults) {
+            _currentSheet = SheetType.none;
+          }
+        });
+      }
+      return;
+    }
+
+    if (routeProvider.routeOptionsList.isNotEmpty) {
+      routeProvider.clearRouteResults();
+      if (mounted && _currentSheet == SheetType.routeOptions) {
+        setState(() {
+          _currentSheet = SheetType.none;
+          _showRouteStepsDetails = false;
+        });
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isSearchingLocation = true;
+        _searchResults = [];
+        _currentSheet = SheetType.searchResults;
+      });
+    }
+
+    try {
+      final url = Uri.parse(
+          'https://nominatim.openstreetmap.org/search?format=json&q=${Uri.encodeComponent(query)}&limit=10&viewbox=$turkeyViewBox&bounded=1&accept-language=tr');
+      final response =
+          await http.get(url, headers: {'User-Agent': 'FuelEstimateApp/1.0'});
+
+      List<LocationResult> results = [];
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        results = data
+            .map((item) {
+              final double? lat =
+                  double.tryParse(item['lat']?.toString() ?? '');
+              final double? lon =
+                  double.tryParse(item['lon']?.toString() ?? '');
+              final String name = item['display_name']?.toString() ?? '';
+              if (lat != null && lon != null && name.isNotEmpty) {
+                return LocationResult(
+                    displayName: name,
+                    coordinates: LatLng(lat, lon),
+                    type: item['type']?.toString() ?? '');
+              }
+              return null;
+            })
+            .whereType<LocationResult>()
+            .toList();
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _searchResults = results;
+        _isSearchingLocation = false;
+        _currentSheet =
+            results.isNotEmpty ? SheetType.searchResults : SheetType.none;
+        if (results.isEmpty && query.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Arama sonucu bulunamadı.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _searchResults = [];
+        _isSearchingLocation = false;
+        _currentSheet = SheetType.none;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Arama hatası: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _selectLocation(LocationResult location) {
+    final controller = _isStartSearchActive ? _startController : _endController;
     final routeProvider = Provider.of<RouteProvider>(context, listen: false);
 
-    if (isStart) {
+    controller.text = location.displayName;
+    if (_isStartSearchActive) {
       routeProvider.setStartLocation(location.coordinates);
       _startFocusNode.unfocus();
-      if (mounted) {
-         setState(() { _startSearchResults = []; });
-      }
     } else {
       routeProvider.setEndLocation(location.coordinates);
       _endFocusNode.unfocus();
-      if (mounted) {
-         setState(() { _endSearchResults = []; });
-      }
     }
 
-     if (mounted) {
-        setState(() { _currentSheet = SheetType.none; });
-     }
+    if (mounted) {
+      setState(() {
+        _searchResults = [];
+        _currentSheet = SheetType.none;
+      });
+    }
   }
 
-  void _handleFocusChange() {
-     if (!mounted) {
-        return;
-     }
+  void _swapStartEndLocations() {
+    if (!mounted) return;
+    final routeProvider = Provider.of<RouteProvider>(context, listen: false);
 
-     // Odak kalktığında arama sonuçlarını temizle/kapat.
-     // Rota options sheet açıksa onu kapatma.
-     // Eğer her iki TextField da odakta değilse ve arama sonuç sheet'i açıksa, kapat.
-     if (!_startFocusNode.hasFocus && !_endFocusNode.hasFocus && _currentSheet == SheetType.searchResults) {
-          setState(() {
-            _startSearchResults = [];
-            _endSearchResults = [];
-            _currentSheet = SheetType.none;
-          });
-     } else if (!_startFocusNode.hasFocus && !_endFocusNode.hasFocus) {
-          // Eğer rota sheet açıksa veya hiçbiri açıksa sadece sonuç listelerini temizle (vizüel olarak görünmesinler)
-           setState(() {
-            _startSearchResults = [];
-            _endSearchResults = [];
-          });
-     }
+    final tempStartLoc = routeProvider.startLocation;
+    final tempEndLoc = routeProvider.endLocation;
+    final tempStartText = _startController.text;
+    final tempEndText = _endController.text;
+
+    _startController.text = tempEndText;
+    _endController.text = tempStartText;
+    routeProvider.setStartLocation(tempEndLoc);
+    routeProvider.setEndLocation(tempStartLoc);
+
+    if (mounted) {
+      setState(() {
+        _searchResults = [];
+        _currentSheet = SheetType.none;
+        _showRouteStepsDetails = false;
+      });
+    }
+    _startFocusNode.unfocus();
+    _endFocusNode.unfocus();
   }
-
-  Future<void> _performSearch(String query, bool isStart) async {
-     if (isStart && query == 'Mevcut Konum') {
-        final routeProvider = Provider.of<RouteProvider>(context, listen: false);
-        final currentLocation = routeProvider.startLocation; // Mevcut konum Provider'dan alınmalı
-        if (currentLocation != null) {
-             _startController.text = 'Mevcut Konum';
-             routeProvider.setStartLocation(currentLocation);
-             if (mounted) { setState(() { _startSearchResults = []; _endSearchResults = []; _currentSheet = SheetType.none; }); }
-             _startFocusNode.unfocus();
-        } else {
-             // Mevcut konum yoksa uyarı ver
-             if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                   const SnackBar(
-                     content: Text('Mevcut konum bilgisi alınamadı.'),
-                     backgroundColor: Colors.orange,
-                  ),
-                );
-             }
-        }
-        return;
-     }
-
-     if (query.isEmpty) {
-        setState(() {
-          if (isStart) { _startSearchResults = []; } else { _endSearchResults = []; }
-           if (_currentSheet == SheetType.searchResults) {
-             _currentSheet = SheetType.none;
-           }
-        });
-        return;
-     }
-
-     if (mounted) {
-        setState(() { _isCalculatingRoute = true; });
-     }
-
-     try {
-        final results = await _fetchLocationSearchResults(query);
-
-        if (!mounted) {
-           return;
-        }
-
-        setState(() {
-          if (isStart) {
-            _startSearchResults = results;
-            _endSearchResults = []; // Diğer arama sonuçlarını temizle
-          } else {
-            _endSearchResults = results;
-            _startSearchResults = []; // Diğer arama sonuçlarını temizle
-          }
-          if (results.isNotEmpty) {
-             _currentSheet = SheetType.searchResults;
-          } else {
-             _currentSheet = SheetType.none;
-             ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Arama sonucu bulunamadı.'),
-                  backgroundColor: Colors.orange,
-               ),
-             );
-          }
-          _isCalculatingRoute = false;
-        });
-
-        // Arama başarılıysa klavyeyi kapat ve odaklanmayı bırak
-        if (isStart) { _startFocusNode.unfocus(); } else { _endFocusNode.unfocus(); }
-
-     } catch (e) {
-        debugPrint('Arama sırasında hata: $e');
-         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(
-               content: Text('Arama yapılırken bir hata oluştu: ${e.toString()}'),
-               backgroundColor: Colors.red,
-              ),
-           );
-           setState(() {
-             _isCalculatingRoute = false;
-             _startSearchResults = [];
-             _endSearchResults = [];
-             _currentSheet = SheetType.none;
-           });
-         }
-     }
-  }
-
-   // Başlangıç ve varış noktalarını değiştiren metod
-   void _swapStartEndLocations() {
-      if (!mounted) return;
-
-      final routeProvider = Provider.of<RouteProvider>(context, listen: false);
-      final tempStartLocation = routeProvider.startLocation;
-      final tempEndLocation = routeProvider.endLocation;
-      final tempStartText = _startController.text;
-      final tempEndText = _endController.text;
-
-      // Text alanlarını ve Provider'daki konumları değiştir
-      _startController.text = tempEndText;
-      _endController.text = tempStartText;
-      routeProvider.setStartLocation(tempEndLocation); // Provider notifyListeners çağırır, UI güncellenir
-      routeProvider.setEndLocation(tempStartLocation); // Provider notifyListeners çağırır, UI güncellenir
-
-      // Rota sonuçlarını temizle, yeni rota aranması gerekir
-      routeProvider.clearRouteResults();
-
-      // Eğer rota seçenekleri sheet'i açıksa kapat (yeni rota aranacak)
-      if (_currentSheet == SheetType.routeOptions) {
-        setState(() {
-          _currentSheet = SheetType.none;
-        });
-      }
-      // Arama sonuçları açıksa kalsın veya kapatılsın (şu anki mantık odaktan çıkınca kapanıyor)
-   }
-
-
-   Future<List<RouteOption>> _fetchRouteOptions(LatLng start, LatLng end) async {
-      try {
-       final url = Uri.parse('http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson&alternatives=true&steps=false');
-       debugPrint('OSRM API Çağrısı: $url');
-       final response = await http.get(url);
-       debugPrint('OSRM API Yanıt Kodu: ${response.statusCode}');
-
-       if (response.statusCode == 200) {
-         final data = json.decode(response.body);
-         debugPrint('API\'den gelen rota sayısı: ${data['routes']?.length ?? 0}');
-
-         if (data['routes'] != null && data['routes'].isNotEmpty) {
-           final List<RouteOption> routeOptions = [];
-           final vehicleProvider = Provider.of<VehicleProvider>(context, listen: false);
-           final selectedVehicle = vehicleProvider.selectedVehicle;
-
-           const double cityPercentage = 50.0;
-
-           final calculator = selectedVehicle != null
-               ? FuelCostCalculator(vehicle: selectedVehicle, fuelPricePerLiter: _sampleFuelPricePerLiter, cityPercentage: cityPercentage)
-               : null;
-
-           for (var i = 0; i < data['routes'].length; i++) {
-             final route = data['routes'][i];
-             final List<dynamic> coordinates = route['geometry']['coordinates'];
-             final List<LatLng> points = coordinates.map((coord) { if (coord is List && coord.length >= 2) { final double? lon = (coord[0] as num?)?.toDouble(); final double? lat = (coord[1] as num?)?.toDouble(); if (lat != null && lon != null) { return LatLng(lat, lon); } } return null; }).where((point) => point != null).cast<LatLng>().toList();
-
-             if (points.isEmpty) {
-                 continue;
-             }
-
-             final double distanceInMeters = (route['distance'] as num?)?.toDouble() ?? 0.0;
-             final double durationInSeconds = (route['duration'] as num?)?.toDouble() ?? 0.0;
-             final double distanceInKm = distanceInMeters / 1000;
-             final int durationInMinutes = (durationInSeconds / 60).round();
-
-            final bool isTollRoute = i == 0;
-            final double additionalCostForRoute = isTollRoute ? _fixedTollCostPlaceholder : 0.0;
-
-            Map<String, double>? costRange;
-            Map<String, dynamic>? routeDetails;
-
-            if (calculator != null) {
-                routeDetails = calculator.calculateRouteDetails(distanceInKm, additionalTollCost: additionalCostForRoute);
-                costRange = calculator.calculateRouteCost(distanceInKm, additionalTollCost: additionalCostForRoute);
-            } else {
-               routeDetails = null;
-               costRange = null;
-            }
-
-            routeOptions.add(
-              RouteOption(
-                 name: i == 0 ? 'En Hızlı Rota' : 'Alternatif Rota ${i + 1}',
-                distance: '${distanceInKm.toStringAsFixed(1)} km',
-                duration: '$durationInMinutes dk',
-                isTollRoad: isTollRoute,
-                points: points,
-                costRange: costRange,
-                routeDetails: routeDetails,
-              ),
-            );
-          }
-          return routeOptions;
-        } else {
-          debugPrint('API\'den routes listesi boş geldi.');
-          return [];
-        }
-       } else {
-         debugPrint('Rota hesaplama API hatası: ${response.statusCode} - ${response.body}');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rota hesaplama servisi hatası: ${response.statusCode}'), backgroundColor: Colors.red,));
-          }
-         return [];
-       }
-     } catch (e) {
-       debugPrint('Rota API çağrısı sırasında hata: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Rota hesaplanırken bir hata oluştu: ${e.toString()}'), backgroundColor: Colors.red,));
-        }
-       return [];
-     }
-   }
 
   void _onRouteSearchRequested() async {
     final routeProvider = Provider.of<RouteProvider>(context, listen: false);
     final start = routeProvider.startLocation;
     final end = routeProvider.endLocation;
 
-    _startSearchResults = [];
-    _endSearchResults = [];
-     if (_currentSheet == SheetType.searchResults) {
-        if (mounted) {
-            setState(() { _currentSheet = SheetType.none; });
-        }
-     }
+    _startFocusNode.unfocus();
+    _endFocusNode.unfocus();
 
-    if (start != null && end != null) {
-      if (mounted) {
-        setState(() {
-          _isCalculatingRoute = true;
-          _currentSheet = SheetType.none;
-          routeProvider.clearRouteResults();
-        });
-      }
-
-      final routeOptions = await _fetchRouteOptions(start, end);
-
-      if (!mounted) {
-        return;
-      }
-
-      if (routeOptions.isNotEmpty) {
-        routeProvider.setRouteOptions(routeOptions);
-
-        if (routeProvider.selectedRouteOption != null && routeProvider.selectedRouteOption!.points.isNotEmpty) {
-           _fitMapToRoute(routeProvider.selectedRouteOption!.points);
-        }
-
-        setState(() { _currentSheet = SheetType.routeOptions; });
-
-      } else {
-        routeProvider.clearRouteResults();
-         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Belirtilen noktalar arasında rota bulunamadı.'), backgroundColor: Colors.orange,),
-         );
-         // Rota bulunamadıysa boş rota sheet'i göster
-         setState(() { _currentSheet = SheetType.routeOptions; });
-      }
-
-      setState(() { _isCalculatingRoute = false; });
-
-      _startFocusNode.unfocus();
-      _endFocusNode.unfocus();
-    } else {
-       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lütfen başlangıç ve varış noktalarını seçin.'), backgroundColor: Colors.orange,),
-        );
-       }
-    }
-  }
-
-   void _fitMapToRoute(List<LatLng> points) {
-    if (points.isNotEmpty) {
-      try {
-        _mapController.fitCamera(CameraFit.bounds(bounds: LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(50)));
-      } catch (e) {
-        debugPrint('Haritayı rotaya odaklama hatası: $e');
-      }
-    }
-  }
-
-  // Arama Sonucu Liste Öğesi Widget'ı
-  Widget _buildLocationResultListItem(BuildContext context, LocationResult result, bool isStartSearch) {
-     return ListTile(
-        title: Text(result.displayName, style: const TextStyle(fontSize: 16)), // Font boyutu ayarlandı
-        subtitle: Text(result.type, style: const TextStyle(fontSize: 12, color: Colors.grey)), // Font boyutu ve renk ayarlandı
-        leading: Icon(isStartSearch ? Icons.location_on : Icons.flag, color: isStartSearch ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error), // Tema renkleri kullanıldı
-        onTap: () {
-           _selectLocation(result, isStartSearch);
-        },
-        // Görsel ayrım için hafif bir divider
-        trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0), // Padding ayarlandı
+    if (start == null || end == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lütfen başlangıç ve varış noktalarını seçin.'),
+          backgroundColor: Colors.orange,
+        ),
       );
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isCalculatingRoute = true;
+        _currentSheet = SheetType.none;
+        routeProvider.clearRouteResults();
+        _showRouteStepsDetails = false;
+        _searchResults = [];
+      });
+    }
+
+    try {
+      final routeOptions = await _fetchRouteOptions(start, end);
+      if (!mounted) return;
+
+      routeProvider.setRouteOptions(routeOptions);
+
+      setState(() {
+        _isCalculatingRoute = false;
+        if (routeOptions.isNotEmpty) {
+          _currentSheet = SheetType.routeOptions;
+          if (routeProvider.selectedRouteOption != null) {
+            _fitMapToRoute(routeProvider.selectedRouteOption!.points);
+          }
+        } else {
+          _currentSheet = SheetType.none;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Rota bulunamadı.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isCalculatingRoute = false;
+        _currentSheet = SheetType.none;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Rota hesaplanırken hata oluştu: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
-  // Rota Seçeneği Liste Öğesi Widget'ı (Dikey Liste İçin)
-  Widget _buildRouteOptionListItem(BuildContext context, RouteOption route, bool isSelected) {
+  Future<List<RouteOption>> _fetchRouteOptions(LatLng start, LatLng end) async {
+    final url = Uri.parse(
+        'http://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson&alternatives=true&steps=true&annotations=true');
+    final response = await http.get(url);
+
+    if (response.statusCode != 200) {
+      throw Exception('OSRM API Error: ${response.statusCode}');
+    }
+
+    final data = json.decode(response.body);
+    if (data['routes'] == null || data['routes'].isEmpty) {
+      return [];
+    }
+
+    final vehicleProvider =
+        Provider.of<VehicleProvider>(context, listen: false);
+    final selectedVehicle = vehicleProvider.selectedVehicle;
+    const double cityPercentageForFuel = 50.0;
+    final calculator = selectedVehicle != null
+        ? FuelCostCalculator(
+            vehicle: selectedVehicle,
+            fuelPricePerLiter: _sampleFuelPricePerLiter,
+            cityPercentage: cityPercentageForFuel)
+        : null;
+
+    List<RouteOption> routeOptions = [];
+
+    for (var routeIndex = 0; routeIndex < data['routes'].length; routeIndex++) {
+      // routeIndex olarak değiştirdim
+      final routeData =
+          data['routes'][routeIndex]; // routeData olarak değiştirdim
+      final String routeName = routeIndex == 0
+          ? 'En Hızlı Rota'
+          : 'Alternatif Rota ${routeIndex + 1}';
+
+      final List<LatLng> points =
+          (routeData['geometry']['coordinates'] as List<dynamic>? ?? [])
+              .map((coord) {
+                if (coord is List && coord.length >= 2) {
+                  final double? lon = (coord[0] as num?)?.toDouble();
+                  final double? lat = (coord[1] as num?)?.toDouble();
+                  if (lat != null && lon != null) return LatLng(lat, lon);
+                }
+                return null;
+              })
+              .whereType<LatLng>()
+              .toList();
+
+      if (points.isEmpty) continue;
+
+      final double distanceMeters =
+          (routeData['distance'] as num?)?.toDouble() ?? 0.0;
+      final double durationSeconds =
+          (routeData['duration'] as num?)?.toDouble() ?? 0.0;
+      final double distanceKm = distanceMeters / 1000;
+      final int durationMinutes = (durationSeconds / 60).round();
+
+      List<RouteStep> routeSteps = [];
+      if (routeData['legs'] != null &&
+          routeData['legs'].isNotEmpty &&
+          routeData['legs'][0]['steps'] != null) {
+        routeSteps = (routeData['legs'][0]['steps'] as List<dynamic>)
+            .map((stepData) => RouteStep.fromJson(stepData))
+            .toList();
+      }
+
+      final tollResult = _calculateDetailedToll(routeSteps);
+      final double calculatedTollCost = tollResult['totalCost'] as double;
+      final bool hasTollSection =
+          tollResult['hasTollRoadSectionVisible'] as bool;
+      final List<String> tollSegmentsDescriptions =
+          tollResult['segments'] as List<String>;
+
+      Map<String, dynamic> costDetails = {};
+      Map<String, double>? costRange;
+      if (calculator != null) {
+        costDetails = calculator.calculateRouteDetails(distanceKm,
+            additionalTollCost: calculatedTollCost);
+        costRange = calculator.calculateRouteCost(distanceKm,
+            additionalTollCost: calculatedTollCost);
+      } else {
+        costDetails['additionalTollCost'] = calculatedTollCost;
+      }
+
+      costDetails['identifiedTollSegments'] = tollSegmentsDescriptions;
+      costDetails['tollCostUnknown'] = tollResult['tollCostUnknown'] as bool;
+      costDetails['hasTollRoadSectionVisible'] = hasTollSection;
+
+      // Get intermediate place names (ARADAKİLER)
+      List<String> intermediatePlaces =
+          await _getIntermediatePlaceNames(points);
+
+      // ***** YENİ KISIM: BAŞLANGIÇ VE BİTİŞ ŞEHİRLERİNİ EKLEME *****
+      List<String> finalPlaceNames = [];
+
+      // Başlangıç şehrini al ve listeye ekle (eğer varsa ve listede yoksa)
+      if (points.isNotEmpty) {
+        String? startCity = await _getSignificantPlaceName(points.first);
+        if (startCity != null) {
+          finalPlaceNames.add(startCity);
+        }
+      }
+
+      // Aradaki şehirleri ekle (başlangıçla aynıysa ekleme)
+      for (String intermediatePlace in intermediatePlaces) {
+        if (finalPlaceNames.isEmpty ||
+            finalPlaceNames.last != intermediatePlace) {
+          finalPlaceNames.add(intermediatePlace);
+        }
+      }
+
+      // Bitiş şehrini al ve listeye ekle (eğer varsa ve listedeki son elemanla aynı değilse)
+      if (points.length > 1) {
+        // En az iki nokta olmalı ki points.last anlamlı olsun
+        String? endCity = await _getSignificantPlaceName(points.last);
+        if (endCity != null) {
+          if (finalPlaceNames.isEmpty || finalPlaceNames.last != endCity) {
+            finalPlaceNames.add(endCity);
+          }
+        }
+      }
+      // ***** BİTTİ YENİ KISIM *****
+
+      routeOptions.add(RouteOption(
+        name: routeName,
+        distance: '${distanceKm.toStringAsFixed(1)} km',
+        duration: '$durationMinutes dk',
+        isTollRoad: hasTollSection,
+        points: points,
+        costRange: costRange,
+        routeDetails: costDetails,
+        steps: routeSteps,
+        intermediatePlaces: finalPlaceNames, // Güncellenmiş listeyi kullan
+      ));
+    }
+    return routeOptions;
+  }
+
+  // _findClosestGate: Bu fonksiyon önceki yanıttaki gibi kalacak (her zaman en yakın gişeyi ve mesafesini loglayan versiyon)
+  TollGate? _findClosestGate(
+      LatLng coordinate, List<TollGate> gates, double thresholdMeters) {
+    TollGate? closestGate;
+    double minDistance = double.infinity;
+
+    debugPrint(
+        'DEBUG: _findClosestGate: Searching near coord (${coordinate.latitude.toStringAsFixed(5)}, ${coordinate.longitude.toStringAsFixed(5)}) with threshold ${thresholdMeters}m.');
+
+    if (gates.isEmpty) {
+      debugPrint(
+          'DEBUG: _findClosestGate: Error - Provided gates list is empty.');
+      return null;
+    }
+
+    for (final gate in gates) {
+      final distance = _distanceCalculator(coordinate, gate.coordinates);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestGate = gate;
+      }
+    }
+
+    if (closestGate != null) {
+      debugPrint(
+          'DEBUG: _findClosestGate: Closest gate found is "${closestGate.name}" at distance ${minDistance.toStringAsFixed(1)}m.');
+      debugPrint(
+          'DEBUG: _findClosestGate:   (Search Coord: ${coordinate.latitude.toStringAsFixed(5)}, ${coordinate.longitude.toStringAsFixed(5)})');
+      debugPrint(
+          'DEBUG: _findClosestGate:   (Closest Gate "${closestGate.name}" Coords: ${closestGate.coordinates.latitude.toStringAsFixed(5)}, ${closestGate.coordinates.longitude.toStringAsFixed(5)})');
+
+      if (minDistance <= thresholdMeters) {
+        debugPrint(
+            'DEBUG: _findClosestGate:   -> SUCCESS: Distance is within threshold. Gate Matched.');
+        return closestGate;
+      } else {
+        debugPrint(
+            'DEBUG: _findClosestGate:   -> FAILURE: Distance (${minDistance.toStringAsFixed(1)}m) exceeds threshold (${thresholdMeters}m). No Match.');
+        return null;
+      }
+    } else {
+      debugPrint(
+          'DEBUG: _findClosestGate: Error - No closest gate could be determined.');
+      return null;
+    }
+  }
+
+    Map<String, dynamic> _calculateDetailedToll(List<RouteStep> steps) {
+        double totalTollCost = 0.0;
+        List<String> identifiedTollSegments = [];
+        bool tollCostUnknown = false;
+        bool hasTollRoadSectionVisible = false;
+        bool isOnOtoyolSegment = false;
+        int potentialOtoyolEntryStepIndex = -1; // Otoyol olarak işaretlenen İLK adımın indeksi
+
+        debugPrint('\n--- DEBUG: Starting _calculateDetailedToll ---');
+        debugPrint('DEBUG: Total steps in route: ${steps.length}');
+
+        // İsteğe bağlı: Tüm adımları ve otoyol kontrolünü yazdırmak için yorumu kaldırın
+        /*
+        debugPrint('DEBUG: --- Verifying All Route Steps and Otoyol Keyword Check ---');
+        if (steps.isEmpty) {
+            debugPrint('DEBUG: Route has no steps!');
+        }
+        for (int k = 0; k < steps.length; k++) {
+            final step = steps[k];
+            final stepNameLower = step.name.toLowerCase();
+            final containsOtoyol = stepNameLower.contains('otoyol');
+            final containsCevreYolu = stepNameLower.contains('çevre yolu');
+            final isStepConsideredOtoyol = containsOtoyol || containsCevreYolu;
+            debugPrint('DEBUG:   Step ${k.toString().padLeft(2, '0')}: Name: "${step.name}"');
+            debugPrint('DEBUG:     Coords: (${step.location.latitude.toStringAsFixed(5)}, ${step.location.longitude.toStringAsFixed(5)})');
+            debugPrint('DEBUG:     IsConsideredOtoyol: $isStepConsideredOtoyol');
+        }
+        debugPrint('DEBUG: --- End of Verifying All Route Steps ---');
+        */
+
+        for (int i = 0; i < steps.length; i++) {
+            final currentStep = steps[i];
+            final previousStep = i > 0 ? steps[i-1] : null;
+            final currentRoadName = currentStep.name.toLowerCase();
+            final previousRoadName = previousStep?.name.toLowerCase() ?? '';
+            final bool isCurrentOtoyol = currentRoadName.contains('otoyol') || currentRoadName.contains('çevre yolu');
+            final bool isPreviousOtoyol = previousRoadName.contains('otoyol') || previousRoadName.contains('çevre yolu');
+
+            debugPrint('DEBUG Adım $i: Ad: "${currentStep.name}" | MevcutOtoyol: $isCurrentOtoyol | ÖncekiOtoyol: $isPreviousOtoyol | SegmentteMi: $isOnOtoyolSegment | Girişİndeksi(OtoyolunİlkAdımı): $potentialOtoyolEntryStepIndex');
+
+            // Entry Detection: Otoyol olarak işaretlenen İLK adımı bul
+            if (isCurrentOtoyol && !isOnOtoyolSegment) {
+                if (!isPreviousOtoyol || i == 0) {
+                    isOnOtoyolSegment = true;
+                    potentialOtoyolEntryStepIndex = i; 
+                    debugPrint('DEBUG: --> OTOYOL SEGMENTİNE GİRİŞ TESPİT EDİLDİ (Potential Entry): Step $i Adı: "${currentStep.name}"');
+                }
+            }
+            // Exit Detection: Otoyoldan çıkışı bul
+            else if (!isCurrentOtoyol && isPreviousOtoyol && isOnOtoyolSegment) {
+                 debugPrint('DEBUG: --> KOŞUL SAĞLANDI: OTOYOL SEGMENTİNDEN ÇIKIŞ TESPİT EDİLDİ (Step $i Adı: "${currentStep.name}")');
+                 
+                 if (potentialOtoyolEntryStepIndex < 0) { 
+                    debugPrint("DEBUG:     HATA: potentialOtoyolEntryStepIndex ($potentialOtoyolEntryStepIndex) çıkışta geçerli değil. Segment atlanıyor.");
+                    isOnOtoyolSegment = false; 
+                    potentialOtoyolEntryStepIndex = -1;
+                    continue;
+                }
+
+                RouteStep actualEntryReferenceStep;
+                int actualEntryReferenceStepIndex;
+
+                if (potentialOtoyolEntryStepIndex > 0 && 
+                    steps[potentialOtoyolEntryStepIndex -1].name.toLowerCase().contains('otoyol') == false && 
+                    steps[potentialOtoyolEntryStepIndex -1].name.toLowerCase().contains('çevre yolu') == false) {
+                    actualEntryReferenceStep = steps[potentialOtoyolEntryStepIndex - 1];
+                    actualEntryReferenceStepIndex = potentialOtoyolEntryStepIndex - 1;
+                    debugPrint('DEBUG:     Giriş referans noktası: ÖNCEKİ NORMAL YOL (Step $actualEntryReferenceStepIndex Adı:"${actualEntryReferenceStep.name}")');
+                } else {
+                    actualEntryReferenceStep = steps[potentialOtoyolEntryStepIndex];
+                    actualEntryReferenceStepIndex = potentialOtoyolEntryStepIndex;
+                    debugPrint('DEBUG:     Giriş referans noktası: OTOYOLUN İLK ADIMI (Step $actualEntryReferenceStepIndex Adı:"${actualEntryReferenceStep.name}")');
+                }
+
+                final RouteStep actualExitReferenceStep = currentStep; 
+                final int actualExitReferenceStepIndex = i;
+
+                debugPrint('DEBUG:     --- İşlenecek Segment Detayları (Orta Segment) ---');
+                debugPrint('DEBUG:       Giriş Gişesi İçin Referans Alınan Adım: $actualEntryReferenceStepIndex');
+                debugPrint('DEBUG:         Adı: "${actualEntryReferenceStep.name}"');
+                debugPrint('DEBUG:         >>> GİRİŞ KOORDİNATLARI: (${actualEntryReferenceStep.location.latitude.toStringAsFixed(5)}, ${actualEntryReferenceStep.location.longitude.toStringAsFixed(5)})');
+                debugPrint('DEBUG:       Çıkış Gişesi İçin Referans Alınan Adım: $actualExitReferenceStepIndex');
+                debugPrint('DEBUG:         Adı: "${actualExitReferenceStep.name}"');
+                debugPrint('DEBUG:         >>> ÇIKIŞ KOORDİNATLARI: (${actualExitReferenceStep.location.latitude.toStringAsFixed(5)}, ${actualExitReferenceStep.location.longitude.toStringAsFixed(5)})');
+                debugPrint('DEBUG:     -------------------------------------------------');
+
+                final closestEntryGate = _findClosestGate(actualEntryReferenceStep.location, allTollGates, _gateMatchThresholdMeters);
+                final closestExitGate = _findClosestGate(actualExitReferenceStep.location, allTollGates, _gateMatchThresholdMeters);
+
+                String segmentDesc;
+                double? segmentCost;
+
+                if (closestEntryGate != null && closestExitGate != null) {
+                    final entryName = closestEntryGate.name;
+                    final exitName = closestExitGate.name;
+                    segmentDesc = "$entryName -> $exitName";
+                    debugPrint('DEBUG:       -> Matched Gates: Entry="$entryName", Exit="$exitName"');
+                    
+                    // ***** YENİ MALİYET ARAMA MANTIĞI *****
+                    if (tollCostsMatrix.containsKey(entryName) && tollCostsMatrix[entryName]!.containsKey(exitName)) {
+                       segmentCost = tollCostsMatrix[entryName]![exitName]!;
+                       totalTollCost += segmentCost;
+                        debugPrint('DEBUG:         -> COST FOUND in matrix (Direction: $entryName -> $exitName): ${segmentCost.toStringAsFixed(2)} ₺.');
+                    } 
+                    // Ters yönü kontrol et
+                    else if (tollCostsMatrix.containsKey(exitName) && tollCostsMatrix[exitName]!.containsKey(entryName)) {
+                       segmentCost = tollCostsMatrix[exitName]![entryName]!; // DİKKAT: Anahtarlar ters çevrildi
+                       totalTollCost += segmentCost;
+                        debugPrint('DEBUG:         -> COST FOUND in matrix (REVERSE Direction: $exitName -> $entryName): ${segmentCost.toStringAsFixed(2)} ₺.');
+                    }
+                    else {
+                       tollCostUnknown = true;
+                       debugPrint('DEBUG:         -> COST NOT FOUND in matrix for "$entryName" -> "$exitName" (and reverse).');
+                    }
+                    // ***** BİTTİ YENİ MALİYET ARAMA MANTIĞI *****
+
+                } else {
+                    segmentDesc = "Ücretli Yol Segmenti (Referans Adımlar: $actualEntryReferenceStepIndex-${actualExitReferenceStepIndex})";
+                    debugPrint('DEBUG:       -> Gates NOT Matched (Entry: ${closestEntryGate?.name ?? "Yok"}, Exit: ${closestExitGate?.name ?? "Yok"}). Setting tollCostUnknown=true.');
+                    if (closestEntryGate != null) segmentDesc += " (Giriş: ${closestEntryGate.name}?)";
+                    else if (closestExitGate != null) segmentDesc += " (Çıkış: ${closestExitGate.name}?)";
+                    else segmentDesc += " (Gişeler Belirlenemedi)";
+                    tollCostUnknown = true;
+                }
+
+                identifiedTollSegments.add(segmentCost != null ? "$segmentDesc (${segmentCost.toStringAsFixed(2)} ₺)" : "$segmentDesc (Maliyet Bilinmiyor)");
+                hasTollRoadSectionVisible = true;
+                debugPrint('DEBUG:     -> Segment işlendi. Toplam Gişe: ${totalTollCost.toStringAsFixed(2)}, Bilinmeyen Bayrağı: $tollCostUnknown');
+
+                isOnOtoyolSegment = false;
+                potentialOtoyolEntryStepIndex = -1;
+            }
+        } // End of for loop
+
+        // Handle case where route ends on an Otoyol
+        if (isOnOtoyolSegment && potentialOtoyolEntryStepIndex != -1) {
+             debugPrint('DEBUG: --> ROTA OTOYOL ÜZERİNDE BİTİYOR.');
+             if (potentialOtoyolEntryStepIndex < 0) {
+                debugPrint("DEBUG:     HATA: potentialOtoyolEntryStepIndex ($potentialOtoyolEntryStepIndex) rota sonunda geçerli değil. Atlanıyor.");
+             } else {
+                RouteStep actualEntryReferenceStep;
+                int actualEntryReferenceStepIndex;
+
+                if (potentialOtoyolEntryStepIndex > 0 && 
+                    steps[potentialOtoyolEntryStepIndex -1].name.toLowerCase().contains('otoyol') == false && 
+                    steps[potentialOtoyolEntryStepIndex -1].name.toLowerCase().contains('çevre yolu') == false) {
+                    actualEntryReferenceStep = steps[potentialOtoyolEntryStepIndex - 1];
+                    actualEntryReferenceStepIndex = potentialOtoyolEntryStepIndex - 1;
+                    debugPrint('DEBUG:     Giriş referans noktası (rota sonu): ÖNCEKİ NORMAL YOL (Step $actualEntryReferenceStepIndex Adı:"${actualEntryReferenceStep.name}")');
+                } else {
+                    actualEntryReferenceStep = steps[potentialOtoyolEntryStepIndex];
+                    actualEntryReferenceStepIndex = potentialOtoyolEntryStepIndex;
+                     debugPrint('DEBUG:     Giriş referans noktası (rota sonu): OTOYOLUN İLK ADIMI (Step $actualEntryReferenceStepIndex Adı:"${actualEntryReferenceStep.name}")');
+                }
+
+                final RouteStep actualExitReferenceStep = steps.last;
+                final int actualExitReferenceStepIndex = steps.length - 1;
+
+                debugPrint('DEBUG:     --- İşlenecek Segment Detayları (Rota Sonu) ---');
+                debugPrint('DEBUG:       Giriş Gişesi İçin Referans Adım: $actualEntryReferenceStepIndex');
+                debugPrint('DEBUG:         Adı: "${actualEntryReferenceStep.name}"');
+                debugPrint('DEBUG:         >>> GİRİŞ KOORDİNATLARI: (${actualEntryReferenceStep.location.latitude.toStringAsFixed(5)}, ${actualEntryReferenceStep.location.longitude.toStringAsFixed(5)})');
+                debugPrint('DEBUG:       Çıkış Gişesi İçin Referans Adım (Rota Sonu): $actualExitReferenceStepIndex');
+                debugPrint('DEBUG:         Adı: "${actualExitReferenceStep.name}"');
+                debugPrint('DEBUG:         >>> ÇIKIŞ KOORDİNATLARI: (${actualExitReferenceStep.location.latitude.toStringAsFixed(5)}, ${actualExitReferenceStep.location.longitude.toStringAsFixed(5)})');
+                debugPrint('DEBUG:     -------------------------------------------------');
+                
+                final closestEntryGate = _findClosestGate(actualEntryReferenceStep.location, allTollGates, _gateMatchThresholdMeters);
+                final closestExitGate = _findClosestGate(actualExitReferenceStep.location, allTollGates, _gateMatchThresholdMeters);
+                
+                String segmentDesc;
+                double? segmentCost;
+
+                if (closestEntryGate != null && closestExitGate != null) {
+                    final entryName = closestEntryGate.name;
+                    final exitName = closestExitGate.name;
+                    segmentDesc = "$entryName -> $exitName (Rota Sonu)";
+                    debugPrint('DEBUG:       -> Matched Gates (End of Route): Entry="$entryName", Exit="$exitName"');
+
+                    // ***** YENİ MALİYET ARAMA MANTIĞI (ROTA SONU İÇİN DE) *****
+                    if (tollCostsMatrix.containsKey(entryName) && tollCostsMatrix[entryName]!.containsKey(exitName)) {
+                       segmentCost = tollCostsMatrix[entryName]![exitName]!;
+                       totalTollCost += segmentCost;
+                        debugPrint('DEBUG:         -> COST FOUND in matrix (Direction: $entryName -> $exitName): ${segmentCost.toStringAsFixed(2)} ₺.');
+                    } 
+                    else if (tollCostsMatrix.containsKey(exitName) && tollCostsMatrix[exitName]!.containsKey(entryName)) {
+                       segmentCost = tollCostsMatrix[exitName]![entryName]!; // DİKKAT: Anahtarlar ters çevrildi
+                       totalTollCost += segmentCost;
+                        debugPrint('DEBUG:         -> COST FOUND in matrix (REVERSE Direction: $exitName -> $entryName): ${segmentCost.toStringAsFixed(2)} ₺.');
+                    }
+                    else {
+                       tollCostUnknown = true;
+                       debugPrint('DEBUG:         -> COST NOT FOUND in matrix for "$entryName" -> "$exitName" (and reverse).');
+                    }
+                    // ***** BİTTİ YENİ MALİYET ARAMA MANTIĞI *****
+                } else {
+                    segmentDesc = "Ücretli Yol Segmenti (Referans Adımlar: $actualEntryReferenceStepIndex-${actualExitReferenceStepIndex} - Rota Sonu)";
+                    debugPrint('DEBUG:       -> Gates NOT Matched (End of Route) (Entry: ${closestEntryGate?.name ?? "Yok"}, Exit: ${closestExitGate?.name ?? "Yok"}). Setting tollCostUnknown=true.');
+                    if (closestEntryGate != null) segmentDesc += " (Giriş: ${closestEntryGate.name}?)";
+                    else if (closestExitGate != null) segmentDesc += " (Çıkış: ${closestExitGate.name}?)";
+                    else segmentDesc += " (Gişeler Belirlenemedi)";
+                    tollCostUnknown = true;
+                }
+                identifiedTollSegments.add(segmentCost != null ? "$segmentDesc (${segmentCost.toStringAsFixed(2)} ₺)" : "$segmentDesc (Maliyet Bilinmiyor)");
+                hasTollRoadSectionVisible = true;
+                debugPrint('DEBUG:     -> Segment (Rota Sonu) işlendi. Toplam Gişe: ${totalTollCost.toStringAsFixed(2)}, Bilinmeyen Bayrağı: $tollCostUnknown');
+            }
+        }
+
+        debugPrint('--- DEBUG: Finished _calculateDetailedToll ---');
+        debugPrint('DEBUG: Final Result:');
+        debugPrint('DEBUG:   totalTollCost (Sum of known): ${totalTollCost.toStringAsFixed(2)} ₺');
+        debugPrint('DEBUG:   tollCostUnknown (Any unknown): $tollCostUnknown');
+        debugPrint('DEBUG:   hasTollRoadSectionVisible (UI display flag): $hasTollRoadSectionVisible');
+        debugPrint('DEBUG:   Identified Segments (${identifiedTollSegments.length}):');
+        for(var seg in identifiedTollSegments) {
+           debugPrint('DEBUG:     - $seg');
+        }
+        if (identifiedTollSegments.isEmpty && !hasTollRoadSectionVisible) {
+             debugPrint('DEBUG:   (No toll segments identified based on step names)');
+        }
+        debugPrint('--- END DEBUG --- \n');
+
+        return {
+           'totalCost': totalTollCost,
+           'segments': identifiedTollSegments,
+           'tollCostUnknown': tollCostUnknown,
+           'hasTollRoadSectionVisible': hasTollRoadSectionVisible,
+        };
+    }
+    
+  Future<String?> _getSignificantPlaceName(LatLng coordinates) async {
+    try {
+      final url = Uri.parse(
+          'https://nominatim.openstreetmap.org/reverse?format=json&lat=${coordinates.latitude}&lon=${coordinates.longitude}&zoom=10&addressdetails=1&accept-language=tr');
+      final response =
+          await http.get(url, headers: {'User-Agent': 'FuelEstimateApp/1.0'});
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final address = data?['address'];
+        if (address != null) {
+          return address['province'] ??
+              address['county'] ??
+              address['city_district'] ??
+              address['state'] ??
+              address['city'] ??
+              address['town'] ??
+              address['village'] ??
+              address['suburb'];
+        }
+      }
+    } catch (_) {/* Silent error */}
+    return null;
+  }
+
+  Future<List<String>> _getIntermediatePlaceNames(List<LatLng> points) async {
+    if (points.length < 3) return [];
+
+    List<String> places = [];
+    double cumulativeDistKm = 0.0;
+    const double sampleIntervalKm = 30.0;
+    double nextSampleKm = sampleIntervalKm;
+
+    for (int i = 1; i < points.length - 1; i++) {
+      cumulativeDistKm +=
+          _distanceCalculator(points[i - 1], points[i]) / 1000.0;
+      if (cumulativeDistKm >= nextSampleKm) {
+        String? place = await _getSignificantPlaceName(points[i]);
+        if (place != null && (places.isEmpty || places.last != place)) {
+          places.add(place);
+        }
+        nextSampleKm = cumulativeDistKm + sampleIntervalKm;
+      }
+    }
+    return places;
+  }
+
+  void _fitMapToRoute(List<LatLng> points) {
+    if (points.isNotEmpty && mounted) {
+      try {
+        _mapController.fitCamera(CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(points),
+          padding: const EdgeInsets.all(80),
+        ));
+      } catch (e) {/* Silent error */}
+    }
+  }
+
+  void _unfocusAndHideSearchSheet() {
+    _startFocusNode.unfocus();
+    _endFocusNode.unfocus();
+    if (_currentSheet == SheetType.searchResults && mounted) {
+      setState(() {
+        _currentSheet = SheetType.none;
+        _searchResults = [];
+      });
+    }
+  }
+
+  Widget _buildLocationResultListItem(
+      BuildContext context, LocationResult result) {
+    IconData leadingIcon =
+        _isStartSearchActive ? Icons.location_on : Icons.flag;
+    Color iconColor = _isStartSearchActive
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.error;
+
+    return ListTile(
+      leading: Icon(leadingIcon, color: iconColor),
+      title: Text(result.displayName,
+          maxLines: 2, overflow: TextOverflow.ellipsis),
+      subtitle: Text(result.type,
+          style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+      trailing: Icon(Icons.chevron_right, color: Colors.grey[400]),
+      onTap: () => _selectLocation(result),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+    );
+  }
+
+  Widget _buildRouteOptionListItem({
+    required BuildContext context,
+    required RouteOption route,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final routeDetails = route.routeDetails ?? {};
+    final bool hasToll = routeDetails['hasTollRoadSectionVisible'] ?? false;
+    final bool costUnknown = routeDetails['tollCostUnknown'] ?? false;
+    final double tollCost = routeDetails['additionalTollCost'] ?? 0.0;
+    String tooltip = 'Ücretli Yol İçerebilir';
+    if (hasToll) {
+      if (costUnknown)
+        tooltip = 'Ücretli Yol (Maliyet Bilgisi Yok)';
+      else if (tollCost > 0)
+        tooltip =
+            'Ücretli Yol (Tahmini Gişe: ${tollCost.toStringAsFixed(2)} ₺)';
+      else
+        tooltip = 'Ücretli Yol (Gişe Tespit Edildi/Ücretsiz?)';
+    }
+
     return Card(
-      elevation: isSelected ? 6 : 2, // Seçili olana daha fazla gölge
+      elevation: isSelected ? 4 : 1,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isSelected ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 2) : BorderSide(color: Colors.grey[300]!, width: 1), // Seçili olana tema rengi border, diğerlerine gri border
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey[300]!,
+            width: isSelected ? 1.5 : 1),
       ),
-      color: isSelected ? Theme.of(context).colorScheme.primary : Colors.white,
-      margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 12.0), // Margin artırıldı
+      margin: const EdgeInsets.symmetric(vertical: 5.0, horizontal: 12.0),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Provider.of<RouteProvider>(context, listen: false).selectRouteOption(route);
-          _fitMapToRoute(route.points);
-        },
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16.0), // Padding artırıldı
+          padding: const EdgeInsets.all(12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+              Row(
                 children: [
                   Expanded(
                     child: Text(
                       route.name,
                       style: TextStyle(
-                        fontSize: 18, // Başlık fontu büyütüldü
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600, // Seçili olana bold, diğerine semibold
-                        color: isSelected ? Colors.white : Colors.black87,
-                      ),
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.black87),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (route.isTollRoad)
+                  if (hasToll)
                     Padding(
                       padding: const EdgeInsets.only(left: 8.0),
-                      child: Tooltip( // Tooltip eklendi
-                        message: 'Ücretli Yol İçerebilir',
-                        child: Icon(Icons.toll, size: 22, color: isSelected ? Colors.amberAccent : Colors.orange),
+                      child: Tooltip(
+                        message: tooltip,
+                        child: Icon(Icons.toll,
+                            size: 20,
+                            color: costUnknown
+                                ? Colors.orange
+                                : (tollCost > 0
+                                    ? Colors.redAccent
+                                    : Colors.grey)),
                       ),
                     ),
-                   // Seçili ikonunu sağa yasla
-                   if (isSelected)
-                     const Padding(
-                        padding: EdgeInsets.only(left: 8.0),
-                        child: Icon(Icons.check_circle, size: 22, color: Colors.white),
-                     ),
+                  if (isSelected)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8.0),
+                      child: Icon(Icons.check_circle_outline,
+                          size: 20, color: Colors.green),
+                    ),
                 ],
               ),
-              const SizedBox(height: 12), // Boşluk artırıldı
-              // DÜZELTME: Bu Row içindeki Expanded/Column yapısı yeniden düzenlendi
+              const SizedBox(height: 8),
               Row(
-                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                 children: [
-                    Expanded( // Expanded eklendi
-                       child: Column(
-                         crossAxisAlignment: CrossAxisAlignment.start,
-                         children: [
-                           Icon(Icons.schedule, size: 16, color: isSelected ? Colors.white70 : Colors.grey[600]), // İkon eklendi
-                           const SizedBox(height: 4), // Boşluk eklendi
-                           Text('Süre', style: TextStyle(fontSize: 12, color: isSelected ? Colors.white70 : Colors.grey[700])),
-                           Text(route.duration, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.black87)),
-                         ],
-                       ),
-                    ),
-                    Expanded( // Expanded eklendi
-                       child: Column(
-                         crossAxisAlignment: CrossAxisAlignment.start,
-                         children: [
-                           Icon(Icons.directions_car, size: 16, color: isSelected ? Colors.white70 : Colors.grey[600]), // İkon eklendi
-                            const SizedBox(height: 4), // Boşluk eklendi
-                           const Text('Mesafe', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                           Text(route.distance, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.black87)),
-                         ],
-                       ),
-                    ),
-                    Expanded( // Expanded eklendi
-                       child: Column(
-                       crossAxisAlignment: CrossAxisAlignment.start,
-                       children: [
-                          Icon(Icons.attach_money, size: 16, color: isSelected ? Colors.amberAccent : Theme.of(context).colorScheme.primary), // İkon eklendi
-                          const SizedBox(height: 4), // Boşluk eklendi
-                          const Text('Maliyet (Tahmini)', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          Text(
-                            route.costRange != null
-                                ? '${route.costRange!['minCost']!.toStringAsFixed(1)} - ${route.costRange!['maxCost']!.toStringAsFixed(1)} ₺'
-                                : '-',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: isSelected ? Colors.white : (route.costRange != null ? Theme.of(context).colorScheme.primary : Colors.grey),
-                            ),
-                          ),
-                       ],
-                    ),
-                    ),
-                 ],
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildRouteInfoItem(Icons.schedule, 'Süre', route.duration,
+                      isSelected, context),
+                  _buildRouteInfoItem(Icons.directions_car, 'Mesafe',
+                      route.distance, isSelected, context),
+                  _buildRouteInfoItem(
+                      Icons.local_gas_station,
+                      'Maliyet',
+                      route.costRange != null
+                          ? '${route.costRange!['minCost']!.toStringAsFixed(0)} - ${route.costRange!['maxCost']!.toStringAsFixed(0)} ₺'
+                          : '-',
+                      isSelected,
+                      context,
+                      highlight: true),
+                ],
               ),
             ],
           ),
@@ -545,441 +960,797 @@ class _MapScreenState extends State<MapScreen> with AutomaticKeepAliveClientMixi
     );
   }
 
-  // Rota Detay Kartı Widget'ı (DraggableSheet içinde gösterilecek)
-  Widget _buildRouteDetailedCard(BuildContext context, RouteOption route, String startText, String endText) {
-     final vehicleProvider = Provider.of<VehicleProvider>(context, listen: false);
-     final selectedVehicle = vehicleProvider.selectedVehicle;
-     final routeDetails = route.routeDetails;
-     final double? totalFuelConsumption = routeDetails?['totalFuelConsumption'];
-     final double? additionalTollCost = routeDetails?['additionalTollCost'];
-
-     // DÜZELTME: Yapıyı if/else olarak değiştirdik ve return hatalarını giderdik.
-     // DÜZELTME: ElevatedButton.icon label parametreleri eklendi.
-     // Görsel olarak daha çekici bir kart tasarımı
-     return Card(
-        elevation: 4, margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), color: Colors.white,
-        child: Padding(
-           padding: const EdgeInsets.all(16.0),
-           child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                 Text(
-                    '$startText - $endText',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-                    maxLines: 2, // İki satıra izin ver
-                    overflow: TextOverflow.ellipsis,
-                 ),
-                 const Divider(height: 16, thickness: 1, color: Colors.grey), // Ayırıcı çizgi
-                 // Detaylar - İkonlu ve düzenli satırlar
-                 Row(
-                   children: [
-                      Icon(Icons.schedule, size: 20, color: Colors.grey[600]),
-                      const SizedBox(width: 8),
-                      const Text('Süre:', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                      const SizedBox(width: 4),
-                      Text(route.duration, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
-                   ],
-                 ),
-                 const SizedBox(height: 8),
-                 Row(
-                   children: [
-                      Icon(Icons.directions_car, size: 20, color: Colors.grey[600]),
-                      const SizedBox(width: 8),
-                      const Text('Mesafe:', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                       const SizedBox(width: 4),
-                      Text(route.distance, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
-                   ],
-                 ),
-                 const SizedBox(height: 8),
-
-                 // Maliyet ve Yakıt Detayları (routeDetails null değilse göster)
-                 if (routeDetails != null) ...[
-                     Row(
-                        children: [
-                           Icon(Icons.local_gas_station, size: 20, color: Colors.grey[600]),
-                           const SizedBox(width: 8),
-                           const Text('Yakıt:', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                            const SizedBox(width: 4),
-                           Text(totalFuelConsumption != null ? '${totalFuelConsumption.toStringAsFixed(1)} lt' : '-', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87)),
-                           const SizedBox(width: 16), // İki detay arasına boşluk
-                           Icon(Icons.attach_money, size: 20, color: Theme.of(context).colorScheme.primary),
-                           const SizedBox(width: 8),
-                           const Text('Maliyet (Tahmini):', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                            const SizedBox(width: 4),
-                           Text(route.costRange != null ? '${route.costRange!['minCost']!.toStringAsFixed(2)} - ${route.costRange!['maxCost']!.toStringAsFixed(2)} ₺' : '-', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: route.costRange != null ? Theme.of(context).colorScheme.primary : Colors.grey,),),
-                        ],
-                     ),
-                     const SizedBox(height: 8),
-                     Row(
-                        children: [
-                           Icon(Icons.toll, size: 20, color: Colors.grey[600]),
-                           const SizedBox(width: 8),
-                           const Text('Ek Maliyet:', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                            const SizedBox(width: 4),
-                           Text(additionalTollCost != null && additionalTollCost > 0 ? '${additionalTollCost.toStringAsFixed(2)} ₺' : 'Yok', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: additionalTollCost != null && additionalTollCost > 0 ? Colors.deepOrange : Colors.black87,),),
-                        ],
-                     ),
-                     const SizedBox(height: 8),
-                     Row(
-                       children: [
-                          Icon(Icons.car_rental, size: 20, color: Colors.grey[600]),
-                          const SizedBox(width: 8),
-                          const Text('Hesaplanan Araç:', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                           const SizedBox(width: 4),
-                          Expanded( // Metnin taşmasını önlemek için Expanded
-                             child: Text(
-                                selectedVehicle != null ? '${selectedVehicle.brand} ${selectedVehicle.model}' : 'Yok',
-                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                             ),
-                          ),
-                          // Belki buraya araç değiştirme butonu eklenebilir
-                       ],
-                     ),
-                 ] else ...[
-                   // Araç bilgisi eksikse uyarı
-                   const SizedBox(height: 16),
-                   Card( color: Colors.red[50], child: Padding( padding: const EdgeInsets.all(8.0), child: Row( children: [ const Icon(Icons.warning_amber, color: Colors.red), const SizedBox(width: 8), Expanded(child: Text('Yakıt maliyeti tahmini için araç bilgileri eksik. Lütfen Ayarlar sayfasından bir araç seçin.', style: TextStyle(color: Colors.red[700]),),), ], ), ), ),
-                 ],
-
-                 const SizedBox(height: 24), // Buton öncesi boşluk
-
-                 // Yolculuğa Başla Butonu
-                 SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: () { final start = route.points.first; final end = route.points.last; final url = Uri.parse('https://www.google.com/maps/dir/?api=1&origin=${start.latitude},${start.longitude}&destination=${end.latitude},${end.longitude}&travelmode=driving'); launchUrl(url, mode: LaunchMode.externalApplication).catchError((e){ if(mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Harita uygulaması başlatılamadı: $e'), backgroundColor: Colors.red,),); } return false; }); }, icon: const Icon(Icons.navigation), label: const Text('Yolculuğa Başla', style: TextStyle(fontSize: 16)), style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),),),),
-              ],
-           ),
-        ),
-     );
-  }
-
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    final routeProvider = Provider.of<RouteProvider>(context);
-    final vehicleProvider = Provider.of<VehicleProvider>(context);
-    // selectedVehicle burada unused olarak görünse de _buildRouteDetailedCard içinde kullanılıyor.
-    // final selectedVehicle = vehicleProvider.selectedVehicle;
-
-    final LatLng? currentLocation = routeProvider.startLocation;
-    final List<RouteOption> routeOptions = routeProvider.routeOptionsList;
-
-    final initialMapCenter = currentLocation ?? const LatLng(41.0082, 28.9784);
-    final initialMapZoom = currentLocation != null ? 13.0 : 8.0;
-
-
-    // Sheet içeriğini oluşturma mantığı
-    List<Widget> sheetContentChildren = [];
-
-    // Her zaman sabit başlık kısmını ekle
-     sheetContentChildren.add(
-       Column(
-         mainAxisSize: MainAxisSize.min,
-         children: [
-           Container(
-             margin: const EdgeInsets.symmetric(vertical: 8),
-             height: 5,
-             width: 40,
-             decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)),
-           ),
-           Padding(
-             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-             child: Row(
-               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-               children: [
-                 Text(
-                   _currentSheet == SheetType.searchResults ? 'Arama Sonuçları' : 'Rota Maliyeti',
-                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
-                 ),
-                 IconButton(
-                   icon: const Icon(Icons.close),
-                   tooltip: 'Kapat',
-                   onPressed: () {
-                     if (_currentSheet == SheetType.routeOptions) {
-                       Provider.of<RouteProvider>(context, listen: false).clearAllRouteData();
-                       _startController.clear();
-                       _endController.clear();
-                       _mapController.move(const LatLng(41.0082, 28.9784), 8);
-                     } else if (_currentSheet == SheetType.searchResults) {
-                       _startSearchResults = [];
-                       _endSearchResults = [];
-                     }
-                     if (mounted) {
-                       setState(() { _currentSheet = SheetType.none; });
-                     }
-                   },
-                 ),
-               ],
-             ),
-           ),
-           const Divider(height: 1, thickness: 1, color: Colors.grey),
-         ],
-       )
-     );
-
-
-    // Dinamik içeriği (Arama Sonuçları veya Rota Seçenekleri) koşula göre ekle
-    if (_currentSheet == SheetType.searchResults) {
-      final displayedSearchResults = (_startSearchResults.isNotEmpty || _endSearchResults.isNotEmpty) ? (_startSearchResults.isNotEmpty ? _startSearchResults : _endSearchResults) : []; // Sonuç listelerinden dolu olanı seç
-
-      if (displayedSearchResults.isNotEmpty) {
-        // TickerMode.disable, arama sonuçları listesi genişken haritanın altta animasyon yapmasını önler
-        sheetContentChildren.add(
-          // Sadece arama sonuçları listesi animasyon olmasın diye bir TickerMode ekleyebilirsiniz.
-          // Ancak bu genellikle sheet'in kendisinin scroll animasyonundan bağımsızdır.
-          // Basitlik adına şimdilik kaldırıyorum.
-          // TickerMode(
-          //   enabled: false, // Arka plan animasyonunu durdur
-          //   child:
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: displayedSearchResults.map(
-                // isStartSearch bilgisi için sonuç hangi listeden geliyorsa o listeden mi geldiği kontrolü
-                (result) => _buildLocationResultListItem(context, result, _startSearchResults.contains(result)),
-              ).toList(),
-            ),
-          // ),
-        );
-      } else {
-         sheetContentChildren.add(
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Center(child: Text('Arama sonucu bulunamadı.', style: TextStyle(fontSize: 16, color: Colors.black54))),
-            )
-         );
-      }
-    } else if (_currentSheet == SheetType.routeOptions) {
-        if (routeOptions.isNotEmpty) {
-          sheetContentChildren.add(
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Text(
-                    'Alternatif Rotalar',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Column( // List of items - Bu da Column'un child'ı
-                  mainAxisSize: MainAxisSize.min, // Min size important for inner Column
-                  children: routeOptions.map(
-                    (route) => _buildRouteOptionListItem(
-                      context,
-                      route,
-                      routeProvider.selectedRouteOption == route,
-                    ),
-                  ).toList(),
-                ),
-                // Seçili rota detay kartını göster (eğer bir rota seçiliyse)
-                if (routeProvider.selectedRouteOption != null)
-                   // Divider, detay kartının üstünde olsun
-                  ...[
-                    const Divider(height: 24, thickness: 1, color: Colors.grey), // Ayırıcı çizgi
-                    _buildRouteDetailedCard(
-                      context,
-                      routeProvider.selectedRouteOption!,
-                      _startController.text.isEmpty ? 'Başlangıç Noktası' : _startController.text,
-                      _endController.text.isEmpty ? 'Varış Noktası' : _endController.text,
-                    ),
-                  ],
-                // Rota detay kartı yoksa (yani rotaOptions dolu ama selectedRouteOption null ise, ki olmamalı normalde)
-                // Veya rota options boşken routeOptions listelenmiyor zaten, bu else if'e gerek yok
-                // if (routeProvider.selectedRouteOption == null && routeOptions.isNotEmpty)
-                //   Padding(
-                //     padding: const EdgeInsets.all(16.0),
-                //     child: Center(child: Text('Lütfen yukarıdan bir rota seçin.', style: messageTextStyle)),
-                //   ),
-
-              ],
-            )
-          );
-        } else if (!_isCalculatingRoute) {
-           sheetContentChildren.add(
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: Text('Rota bulunamadı.', style: TextStyle(fontSize: 16, color: Colors.black54))),
-              )
-           );
-        }
-    }
-
-    // BottomNavigationBar'ın kapladığı alan kadar boşluk ekle
-    sheetContentChildren.add(SizedBox(height: MediaQuery.of(context).padding.bottom + 60));
-
-    // initialChildSize ve snapSizes hesaplamaları
-    final bool isStartSearchSheetActive = (_currentSheet == SheetType.searchResults);
-    final int searchResultCount = isStartSearchSheetActive ? (_startSearchResults.isNotEmpty ? _startSearchResults.length : _endSearchResults.length) : 0;
-    final int routeOptionCount = _currentSheet == SheetType.routeOptions ? routeOptions.length : 0;
-
-    final double initialSheetSize = _currentSheet == SheetType.routeOptions
-       ? (routeOptionCount > 0 ? 0.3 : 0.15) // Rota varsa (en az 1), yoksa farklı initial size
-       : (searchResultCount > 0 ? 0.4 : 0.15); // Arama sonucu varsa, yoksa farklı initial size
-
-    final List<double> sheetSnapSizes = _currentSheet == SheetType.routeOptions
-        ? (routeOptionCount > 0 ? [0.15, 0.3, 0.8] : [0.15, 0.8]) // Rota varsa veya yoksa farklı snap noktaları
-        : (searchResultCount > 0 ? [0.15, 0.4, 0.8] : [0.15, 0.8]); // Arama sonucu varsa veya yoksa farklı snap noktaları
-
-
-    return Scaffold(
-      body: Stack(
+  Widget _buildRouteInfoItem(IconData icon, String label, String value,
+      bool isSelected, BuildContext context,
+      {bool highlight = false}) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Harita
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(initialCenter: initialMapCenter, initialZoom: initialMapZoom, maxZoom: 18, minZoom: 3, keepAlive: true),
+          Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.example.rotaapp', maxZoom: 19,),
-              // Mevcut konum marker'ı
-              if (currentLocation != null) MarkerLayer(markers: [Marker(point: currentLocation, width: 40, height: 40, child: const Icon(Icons.my_location, color: Colors.cyan, size: 30),),],),
-              // Başlangıç marker'ı
-              if (routeProvider.startLocation != null) MarkerLayer(markers: [Marker(point: routeProvider.startLocation!, width: 50, height: 50, child: Icon(Icons.location_on, color: Theme.of(context).colorScheme.primary, size: 40),),],),
-              // Varış marker'ı
-              if (routeProvider.endLocation != null) MarkerLayer(markers: [Marker(point: routeProvider.endLocation!, width: 50, height: 50, child: const Icon(Icons.flag, color: Colors.redAccent, size: 40),),],),
-              // Rota çizgisi
-              if (routeProvider.routePoints != null && routeProvider.routePoints!.isNotEmpty) PolylineLayer(polylines: [Polyline(points: routeProvider.routePoints!, strokeWidth: 5, color: Theme.of(context).colorScheme.primary,),],),
+              Icon(icon, size: 14, color: Colors.grey[600]),
+              const SizedBox(width: 4),
+              Text(label,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[700])),
             ],
           ),
-
-          // Arama ve Rota Bul Kartı
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 10, // Status bar altından başla
-            left: 10, right: 10,
-            child: Card(
-              elevation: 8, // Daha belirgin gölge
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // Daha yuvarlak köşeler
-              child: Padding(
-                padding: const EdgeInsets.all(12.0), // Padding artırıldı
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Başlangıç Noktası Arama Alanı
-                    TextField(
-                      controller: _startController, focusNode: _startFocusNode,
-                      decoration: InputDecoration(
-                        hintText: 'Başlangıç noktası', prefixIcon: Icon(Icons.location_on, color: Theme.of(context).colorScheme.primary), // Tema rengi ikon
-                        suffixIcon: currentLocation != null ? IconButton(icon: const Icon(Icons.my_location), tooltip: 'Mevcut Konumu Başlangıç Yap', onPressed: () { _startController.text = 'Mevcut Konum'; Provider.of<RouteProvider>(context, listen: false).setStartLocation(currentLocation); if (mounted) { setState(() { _startSearchResults = []; _endSearchResults = []; _currentSheet = SheetType.none; }); } _startFocusNode.unfocus(); },) : null,
-                        suffixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: BorderSide.none,),
-                        filled: true, fillColor: Colors.grey[100], // Daha açık gri dolgu
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0), // Padding ayarlandı
-                      ),
-                       onSubmitted: (query) { _performSearch(query, true); },
-                    ),
-                    const SizedBox(height: 8),
-                    // Swap Butonu ve Varış Noktası Alanı
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center, // Ortalamak için
-                      children: [
-                        // Swap Butonu
-                        IconButton(
-                           icon: const Icon(Icons.swap_vert),
-                           tooltip: 'Başlangıç ve Varış Noktalarını Değiştir',
-                           onPressed: _swapStartEndLocations,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: _endController, focusNode: _endFocusNode,
-                            decoration: InputDecoration(
-                              hintText: 'Varış noktası', prefixIcon: Icon(Icons.flag, color: Theme.of(context).colorScheme.error), // Tema rengi ikon (Genellikle kırmızı tonları)
-                              suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0,),
-                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: BorderSide.none,),
-                               filled: true, fillColor: Colors.grey[100], // Daha açık gri dolgu
-                               contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0), // Padding ayarlandı
-                            ),
-                            onSubmitted: (query) { _performSearch(query, false); },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12), // Buton öncesi boşluk
-                    // Rota Bul Butonu (Tam genişlik)
-                     SizedBox(
-                       width: double.infinity,
-                       child: ElevatedButton.icon(
-                         onPressed: _isCalculatingRoute ? null : _onRouteSearchRequested,
-                         icon: _isCalculatingRoute ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white,),) : const Icon(Icons.search),
-                         label: Text(_isCalculatingRoute ? 'Hesaplanıyor...' : 'Rota Bul', style: const TextStyle(fontSize: 16),), // Yazı boyutu
-                         style: ElevatedButton.styleFrom(
-                           backgroundColor: Theme.of(context).colorScheme.primary,
-                           foregroundColor: Colors.white,
-                           padding: const EdgeInsets.symmetric(vertical: 14.0), // Dikey padding artırıldı
-                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0),),
-                           elevation: 4, // Buton gölgesi
-                         ),
-                       ),
-                     ),
-                  ],
-                ),
-              ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: highlight
+                  ? Theme.of(context).colorScheme.primary
+                  : Colors.black87,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-
-          // Dinamik Olarak Açılan DraggableScrollableSheet (Arama Sonuçları veya Rota Seçenekleri)
-          if (_currentSheet != SheetType.none)
-            DraggableScrollableSheet(
-              // controller: _sheetController, // Controller kullanmak isterseniz aktif edebilirsiniz
-              initialChildSize: initialSheetSize,
-              minChildSize: 0.15, // Minimum boyutu biraz artırdık, handle görünsün
-              maxChildSize: 0.85, // Maksimum boyutu biraz artırdık
-              expand: false, snap: true,
-              snapSizes: sheetSnapSizes,
-              builder: (BuildContext context, ScrollController scrollController) {
-                return Card(
-                   elevation: 8.0, // Kartın gölgesi
-                   shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))), // Daha belirgin yuvarlaklık
-                   margin: EdgeInsets.zero,
-                   clipBehavior: Clip.antiAlias, // İçeriğin köşeleri yuvarlaklığa uyum sağlaması için
-                   child: Container(
-                     // Arka plan rengini tema ile uyumlu yapabilir veya hafif bir renk kullanabilirsiniz
-                     decoration: BoxDecoration(
-                        color: Theme.of(context).canvasColor, // Genellikle beyaz veya açık gri
-                       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                     ),
-                     child: ListView(
-                       controller: scrollController,
-                       padding: EdgeInsets.zero,
-                       children: sheetContentChildren,
-                     ),
-                   ),
-                 );
-              },
-            ),
-
-           // Yükleniyor göstergesi (Rota veya Arama hesaplanırken)
-           if (_isCalculatingRoute)
-             const Positioned.fill(
-               child: ColoredBox(
-                color: Colors.black54, // Yarı şeffaf siyah overlay
-                child: Center(
-                 child: CircularProgressIndicator(
-                     strokeWidth: 3, // Çubuk kalınlığı
-                 ),
-                ),
-               ),
-             ),
         ],
       ),
     );
   }
 
+  IconData _getManeuverIcon(String type, String? modifier) {
+    switch (type) {
+      case 'turn':
+        return Icons.turn_right;
+      case 'new name':
+        return Icons.merge_type;
+      case 'depart':
+        return Icons.outbound;
+      case 'arrive':
+        return Icons.flag;
+      case 'fork':
+        return Icons.call_split;
+      case 'merge':
+        return Icons.merge_type;
+      case 'ramp':
+        return Icons.ramp_right;
+      case 'roundabout':
+        return Icons.roundabout_right;
+      case 'end of road':
+        return Icons.block;
+      case 'continue':
+        return Icons.straight;
+      default:
+        if (modifier?.contains('left') ?? false) return Icons.turn_left;
+        if (modifier?.contains('right') ?? false) return Icons.turn_right;
+        if (modifier == 'straight') return Icons.straight;
+        if (modifier == 'uturn') return Icons.u_turn_right;
+        return Icons.arrow_forward;
+    }
+  }
+
+  Widget _buildRouteDetailedCard(BuildContext context, RouteOption route) {
+    final startText =
+        _startController.text.isNotEmpty ? _startController.text : "Başlangıç";
+    final endText =
+        _endController.text.isNotEmpty ? _endController.text : "Varış";
+    final vehicle =
+        Provider.of<VehicleProvider>(context, listen: false).selectedVehicle;
+    final details = route.routeDetails ?? {};
+
+    final double? fuelLiters = details['totalFuelConsumption'] as double?;
+    final double? fuelCost = details['calculatedFuelCost'] as double?;
+    final double tollCostVal = details['additionalTollCost'] as double? ?? 0.0;
+    final bool costUnknown = details['tollCostUnknown'] as bool? ?? false;
+    final bool hasTollSection =
+        details['hasTollRoadSectionVisible'] as bool? ?? false;
+    final List<String> segments =
+        (details['identifiedTollSegments'] as List<dynamic>? ?? [])
+            .cast<String>();
+    final Map<String, double>? totalCostRange = route.costRange;
+
+    String tollStatusText;
+    Color tollColor = Colors.black87;
+    if (hasTollSection) {
+      if (costUnknown) {
+        tollStatusText = 'Tahmini Gişe: Bilgi Yok';
+        tollColor = Colors.orange.shade800;
+      } else if (tollCostVal > 0) {
+        tollStatusText = 'Tahmini Gişe: ${tollCostVal.toStringAsFixed(2)} ₺';
+        tollColor = Colors.redAccent;
+      } else {
+        tollStatusText = 'Tahmini Gişe: 0.00 ₺ / Ücretsiz?';
+        tollColor = Colors.grey.shade700;
+      }
+    } else {
+      tollStatusText = 'Ücretli Yol Bulunmuyor';
+      tollColor = Colors.grey.shade700;
+    }
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$startText → $endText',
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            const Divider(height: 20),
+            _buildDetailRow(Icons.schedule, 'Süre', route.duration),
+            _buildDetailRow(Icons.directions_car, 'Mesafe', route.distance),
+            _buildDetailRow(
+                Icons.speed,
+                'Araç',
+                vehicle != null
+                    ? '${vehicle.brand} ${vehicle.model}'
+                    : 'Seçilmedi'),
+            const SizedBox(height: 8),
+            if (vehicle != null) ...[
+              _buildDetailRow(
+                  Icons.local_gas_station,
+                  'Yakıt Tüketimi',
+                  fuelLiters != null
+                      ? '${fuelLiters.toStringAsFixed(1)} lt'
+                      : '-'),
+              _buildDetailRow(Icons.monetization_on_outlined, 'Yakıt Maliyeti',
+                  fuelCost != null ? '${fuelCost.toStringAsFixed(2)} ₺' : '-',
+                  color: Theme.of(context).colorScheme.secondary),
+              _buildDetailRow(Icons.toll, 'Gişe Durumu', tollStatusText,
+                  color: tollColor),
+              if (hasTollSection && segments.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 30.0, top: 4, bottom: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: segments
+                        .map((s) => Text(
+                              "• $s",
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey[600]),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ))
+                        .toList(),
+                  ),
+                ),
+              const Divider(height: 20),
+              _buildDetailRow(
+                  Icons.account_balance_wallet,
+                  'Toplam Maliyet',
+                  totalCostRange != null
+                      ? '${totalCostRange['minCost']!.toStringAsFixed(2)} - ${totalCostRange['maxCost']!.toStringAsFixed(2)} ₺'
+                      : 'Hesaplanamadı',
+                  color: Theme.of(context).colorScheme.primary,
+                  isBold: true),
+            ] else ...[
+              Card(
+                color: Colors.orange[50],
+                elevation: 0,
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.orange[700],
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Yakıt/toplam maliyet için araç seçimi gerekli.',
+                          style: TextStyle(
+                              color: Colors.orange[800], fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildDetailRow(Icons.toll, 'Gişe Durumu', tollStatusText,
+                  color: tollColor),
+              if (hasTollSection && segments.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 30.0, top: 4, bottom: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: segments
+                        .map((s) => Text(
+                              "• $s",
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey[600]),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ))
+                        .toList(),
+                  ),
+                ),
+            ],
+            if (route.intermediatePlaces.isNotEmpty) ...[
+              const Divider(height: 24),
+              Text('Tahmini Geçiş Noktaları',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[800])),
+              const SizedBox(height: 6),
+              Text(route.intermediatePlaces.join(' → '),
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+            ],
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Yol Tarifi Adımları',
+                    style:
+                        TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                if (route.steps.isNotEmpty)
+                  TextButton(
+                    onPressed: () => setState(
+                        () => _showRouteStepsDetails = !_showRouteStepsDetails),
+                    child: Text(_showRouteStepsDetails
+                        ? 'Gizle'
+                        : 'Göster (${route.steps.length})'),
+                    style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact),
+                  ),
+              ],
+            ),
+            if (_showRouteStepsDetails && route.steps.isNotEmpty)
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: route.steps.length,
+                  itemBuilder: (context, index) {
+                    final step = route.steps[index];
+                    final icon = _getManeuverIcon(
+                        step.maneuverType, step.maneuverModifier);
+                    String instruction = step.instruction ?? step.name;
+                    if (step.instruction != null &&
+                        step.instruction == step.name) {
+                      instruction = step.instruction!;
+                    } else if (step.instruction != null &&
+                        step.name.isNotEmpty &&
+                        !step.instruction!.contains(step.name)) {
+                      instruction = '${step.instruction} (${step.name})';
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(top: 2.0, right: 8.0),
+                            child: Icon(icon, size: 18, color: Colors.blueGrey),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(instruction,
+                                    style: const TextStyle(fontSize: 13.5)),
+                                Text(
+                                    '${(step.distance / 1000).toStringAsFixed(1)} km',
+                                    style: const TextStyle(
+                                        fontSize: 11, color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.navigation_outlined),
+                label: const Text('Navigasyonu Başlat'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () => _launchNavigation(route),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value,
+      {Color? color, bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.0),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.grey[600]),
+          const SizedBox(width: 10),
+          Text('$label:',
+              style: TextStyle(fontSize: 13, color: Colors.grey[700])),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+                  color: color ?? Colors.black87),
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _launchNavigation(RouteOption route) async {
+    if (route.points.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Navigasyon başlatılamadı: Rota bilgisi eksik.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    final start = route.points.first;
+    final end = route.points.last;
+    final origin = '${start.latitude},${start.longitude}';
+    final destination = '${end.latitude},${end.longitude}';
+    final googleMapsUrl = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&origin=$origin&destination=$destination&travelmode=driving');
+
+    try {
+      if (await canLaunchUrl(googleMapsUrl)) {
+        await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Harita uygulaması açılamadı.';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Harita başlatılamadı: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
-  void dispose() {
-    _startFocusNode.removeListener(_handleFocusChange);
-    _endFocusNode.removeListener(_handleFocusChange);
+  Widget build(BuildContext context) {
+    final routeProvider = Provider.of<RouteProvider>(context);
+    final LatLng? currentLocation = routeProvider.startLocation;
+    final initialCenter = currentLocation ?? const LatLng(39.9334, 32.8597);
+    final initialZoom = currentLocation != null ? 13.0 : 7.0;
 
-    _startController.dispose();
-    _endController.dispose();
-    _startFocusNode.dispose();
-    _endFocusNode.dispose();
-    _mapController.dispose();
-    // _sheetController.dispose(); // Controller kullanılıyorsa dispose edilmel
+    List<Widget> sheetChildren = [];
+    String sheetTitle = '';
+    bool showLoaderInSheet = false;
+    Widget? headerWidget;
 
-    super.dispose();
+    if (_currentSheet != SheetType.none) {
+      if (_currentSheet == SheetType.searchResults) {
+        sheetTitle =
+            'Arama Sonuçları (${_isStartSearchActive ? "Başlangıç" : "Varış"})';
+        showLoaderInSheet = _isSearchingLocation;
+      } else if (_currentSheet == SheetType.routeOptions) {
+        sheetTitle = 'Rota Seçenekleri';
+        showLoaderInSheet = _isCalculatingRoute;
+      }
+
+      headerWidget = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            height: 5,
+            width: 40,
+            decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(10)),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(
+                left: 16.0, right: 8.0, top: 0, bottom: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                    child: Text(
+                  sheetTitle,
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                )),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: 'Kapat',
+                  iconSize: 24,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () {
+                    if (mounted) {
+                      setState(() {
+                        if (_currentSheet == SheetType.routeOptions) {
+                          routeProvider.clearAllRouteData();
+                          _startController.clear();
+                          _endController.clear();
+                          _showRouteStepsDetails = false;
+                        }
+                        _searchResults = [];
+                        _isCalculatingRoute = false;
+                        _isSearchingLocation = false;
+                        _currentSheet = SheetType.none;
+                      });
+                    }
+                    _startFocusNode.unfocus();
+                    _endFocusNode.unfocus();
+                  },
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1),
+        ],
+      );
+    }
+
+    if (_currentSheet == SheetType.searchResults) {
+      if (!showLoaderInSheet) {
+        if (_searchResults.isNotEmpty) {
+          sheetChildren.addAll(_searchResults
+              .map((r) => _buildLocationResultListItem(context, r)));
+        } else {
+          if (!_isSearchingLocation &&
+              (_isStartSearchActive
+                  ? _startController.text.isNotEmpty
+                  : _endController.text.isNotEmpty)) {
+            sheetChildren.add(const Padding(
+                padding: EdgeInsets.all(20.0),
+                child: Center(child: Text('Sonuç bulunamadı.'))));
+          }
+        }
+      }
+    } else if (_currentSheet == SheetType.routeOptions) {
+      if (!showLoaderInSheet && routeProvider.routeOptionsList.isNotEmpty) {
+        sheetChildren.addAll(routeProvider.routeOptionsList
+            .map((route) => _buildRouteOptionListItem(
+                context: context,
+                route: route,
+                isSelected: routeProvider.selectedRouteOption == route,
+                onTap: () {
+                  if (routeProvider.selectedRouteOption != route) {
+                    routeProvider.selectRouteOption(route);
+                    _fitMapToRoute(route.points);
+                    if (_showRouteStepsDetails) {
+                      setState(() => _showRouteStepsDetails = false);
+                    }
+                  }
+                }))
+            .toList());
+
+        if (routeProvider.selectedRouteOption != null) {
+          sheetChildren.add(_buildRouteDetailedCard(
+              context, routeProvider.selectedRouteOption!));
+        }
+      } else if (!showLoaderInSheet && routeProvider.routeOptionsList.isEmpty) {
+        sheetChildren.add(const Padding(
+            padding: EdgeInsets.all(20.0),
+            child: Center(child: Text('Rota bulunamadı.'))));
+      }
+    }
+
+    if (showLoaderInSheet) {
+      sheetChildren.add(const Padding(
+          padding: EdgeInsets.symmetric(vertical: 30.0),
+          child: Center(child: CircularProgressIndicator())));
+    }
+
+    sheetChildren
+        .add(SizedBox(height: MediaQuery.of(context).padding.bottom + 20));
+
+    const double minSheetSize = 0.15;
+    const double midSheetSize = 0.45;
+    const double maxSheetSize = 0.88;
+    final List<double> snapSizes = [minSheetSize, midSheetSize, maxSheetSize];
+    double initialSheetSize = midSheetSize;
+    if (_currentSheet == SheetType.routeOptions)
+      initialSheetSize = maxSheetSize;
+    if (showLoaderInSheet) initialSheetSize = minSheetSize;
+
+    return Scaffold(
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: initialCenter,
+              initialZoom: initialZoom,
+              minZoom: 5,
+              maxZoom: 18,
+              onTap: (_, __) => _unfocusAndHideSearchSheet(),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.rotaapp',
+              ),
+              if (routeProvider.selectedRouteOption != null)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: routeProvider.selectedRouteOption!.points,
+                      strokeWidth: 5,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.8),
+                    ),
+                  ],
+                ),
+              MarkerLayer(
+                markers: [
+                  if (routeProvider.startLocation != null)
+                    Marker(
+                      point: routeProvider.startLocation!,
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.topCenter,
+                      child: Icon(Icons.location_on,
+                          size: 40,
+                          color: Theme.of(context).colorScheme.primary),
+                    ),
+                  if (routeProvider.endLocation != null)
+                    Marker(
+                      point: routeProvider.endLocation!,
+                      width: 40,
+                      height: 40,
+                      alignment: Alignment.topCenter,
+                      child:
+                          Icon(Icons.flag, size: 40, color: Colors.redAccent),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 10,
+            right: 10,
+            child: Card(
+              elevation: 6,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.trip_origin,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _startController,
+                            focusNode: _startFocusNode,
+                            decoration: InputDecoration(
+                              hintText: 'Başlangıç',
+                              isDense: true,
+                              border: InputBorder.none,
+                              suffixIconConstraints:
+                                  const BoxConstraints(maxHeight: 24),
+                              suffixIcon: _startController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 18),
+                                      onPressed: () {
+                                        _startController.clear();
+                                        routeProvider.setStartLocation(null);
+                                        if (mounted)
+                                          setState(() => _searchResults = []);
+                                      },
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    )
+                                  : (currentLocation != null &&
+                                          routeProvider.startLocation !=
+                                              currentLocation)
+                                      ? IconButton(
+                                          icon: const Icon(Icons.my_location,
+                                              size: 18),
+                                          tooltip: 'Mevcut Konum',
+                                          onPressed: () {
+                                            if (mounted)
+                                              setState(() =>
+                                                  _isStartSearchActive = true);
+                                            _performSearch('Mevcut Konum');
+                                          },
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                        )
+                                      : null,
+                            ),
+                            textInputAction: TextInputAction.search,
+                            onSubmitted: (query) {
+                              if (query.isNotEmpty) _performSearch(query);
+                            },
+                            onChanged: (query) {
+                              if (query.isEmpty && _isStartSearchActive) {
+                                if (mounted)
+                                  setState(() => _searchResults = []);
+                                routeProvider.setStartLocation(null);
+                              }
+                            },
+                            onTap: () {
+                              if (mounted)
+                                setState(() => _isStartSearchActive = true);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 10.0),
+                      child: Row(
+                        children: [
+                          Container(
+                              height: 25, width: 1, color: Colors.grey[300]),
+                          IconButton(
+                            icon: const Icon(Icons.swap_vert, size: 22),
+                            tooltip: 'Değiştir',
+                            onPressed: _swapStartEndLocations,
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            constraints: const BoxConstraints(),
+                          ),
+                          Expanded(
+                              child:
+                                  Divider(height: 1, color: Colors.grey[300])),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Icon(Icons.flag_outlined,
+                            color: Colors.redAccent, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _endController,
+                            focusNode: _endFocusNode,
+                            decoration: InputDecoration(
+                              hintText: 'Varış',
+                              isDense: true,
+                              border: InputBorder.none,
+                              suffixIconConstraints:
+                                  const BoxConstraints(maxHeight: 24),
+                              suffixIcon: _endController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 18),
+                                      onPressed: () {
+                                        _endController.clear();
+                                        routeProvider.setEndLocation(null);
+                                        if (mounted)
+                                          setState(() => _searchResults = []);
+                                      },
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    )
+                                  : null,
+                            ),
+                            textInputAction: TextInputAction.search,
+                            onSubmitted: (query) {
+                              if (query.isNotEmpty) _performSearch(query);
+                            },
+                            onChanged: (query) {
+                              if (query.isEmpty && !_isStartSearchActive) {
+                                if (mounted)
+                                  setState(() => _searchResults = []);
+                                routeProvider.setEndLocation(null);
+                              }
+                            },
+                            onTap: () {
+                              if (mounted)
+                                setState(() => _isStartSearchActive = false);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: _isCalculatingRoute
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.directions, size: 20),
+                        label: Text(_isCalculatingRoute
+                            ? 'Hesaplanıyor...'
+                            : 'Rota Bul'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                          elevation: 4,
+                        ),
+                        onPressed: (_isCalculatingRoute ||
+                                routeProvider.startLocation == null ||
+                                routeProvider.endLocation == null)
+                            ? null
+                            : _onRouteSearchRequested,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_currentSheet != SheetType.none)
+            LayoutBuilder(builder: (context, constraints) {
+              return DraggableScrollableSheet(
+                initialChildSize: initialSheetSize,
+                minChildSize: minSheetSize,
+                maxChildSize: maxSheetSize,
+                expand: false,
+                snap: true,
+                snapSizes: snapSizes,
+                builder:
+                    (BuildContext context, ScrollController scrollController) {
+                  return Card(
+                    elevation: 8.0,
+                    shape: const RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(20))),
+                    margin: EdgeInsets.zero,
+                    clipBehavior: Clip.antiAlias,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).canvasColor,
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(20)),
+                      ),
+                      child: ListView(
+                          controller: scrollController,
+                          padding: EdgeInsets.zero,
+                          children: [
+                            if (headerWidget != null) headerWidget,
+                            ...sheetChildren,
+                          ]),
+                    ),
+                  );
+                },
+              );
+            }),
+        ],
+      ),
+    );
   }
 }

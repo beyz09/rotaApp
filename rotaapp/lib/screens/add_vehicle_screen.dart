@@ -38,6 +38,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         fuelType: _fuelTypeController.text,
         cityConsumption: double.parse(_cityConsumptionController.text),
         highwayConsumption: double.parse(_highwayConsumptionController.text),
+        vehicleType: 1,
       );
 
       Provider.of<VehicleProvider>(context, listen: false).addVehicle(vehicle);
