@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/vehicle_provider.dart';
-import '../providers/theme_provider.dart';
 import '../models/vehicle.dart';
 import 'add_vehicle_screen.dart';
 // import '../widgets/vehicle_info_widget.dart'; // Eğer ayrı bir widget oluşturulursa
@@ -54,12 +53,13 @@ class _VehicleScreenState extends State<VehicleScreen> {
   Widget build(BuildContext context) {
     final vehicleProvider = Provider.of<VehicleProvider>(context);
     final selectedVehicle = vehicleProvider.selectedVehicle;
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final backgroundColor =
-        themeProvider.isDarkMode ? Colors.black : Colors.white;
+
+    const Color backgroundColor = Color(0xFFDCF0D8); // Figma'daki yeşil tonu
 
     return Scaffold(
-      backgroundColor: backgroundColor,
+      backgroundColor: backgroundColor, // Arka plan rengi
+      // AppBar'ı Bottom Nav Bar'ın olduğu ana yapıya taşıyabiliriz
+      // body kısmında kart içeriğini göstereceğiz
       body: Center(
         // İçeriği ortalayabiliriz veya DraggableScrollableSheet kullanabiliriz
         child: Column(
@@ -81,6 +81,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
+                color: Colors.black87,
               ),
             ),
             const SizedBox(height: 16),
@@ -98,14 +99,9 @@ class _VehicleScreenState extends State<VehicleScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
+                      const Text(
                         'Araç bilgisi yok.',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: themeProvider.isDarkMode
-                              ? Colors.white70
-                              : Colors.grey,
-                        ),
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
                       ),
                       const SizedBox(height: 16),
                       FloatingActionButton(
@@ -119,8 +115,9 @@ class _VehicleScreenState extends State<VehicleScreen> {
                             ),
                           );
                         },
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: const Icon(Icons.add), // Tema rengi
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primary,
+                        child: Icon(Icons.add), // Tema rengi
                       ),
                     ],
                   ),
@@ -167,22 +164,18 @@ class _VehicleScreenState extends State<VehicleScreen> {
     bool isSelected,
     VoidCallback onTap,
   ) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final textColor = themeProvider.isDarkMode ? Colors.white : Colors.black87;
-    final secondaryTextColor =
-        themeProvider.isDarkMode ? Colors.white70 : Colors.grey[600];
-
     return Card(
       margin: const EdgeInsets.only(bottom: 12), // Kartlar arasına boşluk
       elevation: isSelected ? 4 : 2, // Seçiliyse daha yüksek gölge
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: isSelected
-            ? BorderSide(
-                color: Theme.of(context).colorScheme.primary,
-                width: 2,
-              )
-            : BorderSide.none, // Seçiliyse kenarlık
+        side:
+            isSelected
+                ? BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 2,
+                )
+                : BorderSide.none, // Seçiliyse kenarlık
       ),
       child: InkWell(
         // Tıklanabilir olması için
@@ -207,9 +200,10 @@ class _VehicleScreenState extends State<VehicleScreen> {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : textColor,
+                      color:
+                          isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Colors.black87,
                     ),
                   ),
                 ],
@@ -220,35 +214,34 @@ class _VehicleScreenState extends State<VehicleScreen> {
                   Icon(
                     Icons.local_gas_station,
                     size: 20,
-                    color: secondaryTextColor,
+                    color: Colors.grey[600],
                   ),
                   const SizedBox(width: 4),
                   Text(
                     vehicle.fuelType,
-                    style: TextStyle(fontSize: 15, color: textColor),
+                    style: const TextStyle(fontSize: 15, color: Colors.black87),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.location_city,
-                      size: 20, color: secondaryTextColor),
+                  Icon(Icons.location_city, size: 20, color: Colors.grey[600]),
                   const SizedBox(width: 4),
                   Text(
                     'Şehir içi: ${vehicle.cityConsumption}L/100km',
-                    style: TextStyle(fontSize: 15, color: textColor),
+                    style: const TextStyle(fontSize: 15, color: Colors.black87),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.landscape, size: 20, color: secondaryTextColor),
+                  Icon(Icons.landscape, size: 20, color: Colors.grey[600]),
                   const SizedBox(width: 4),
                   Text(
                     'Şehir dışı: ${vehicle.highwayConsumption}L/100km',
-                    style: TextStyle(fontSize: 15, color: textColor),
+                    style: const TextStyle(fontSize: 15, color: Colors.black87),
                   ),
                 ],
               ),
