@@ -9,6 +9,7 @@ import 'screens/settings_screen.dart';
 import 'providers/route_provider.dart';
 import 'providers/vehicle_provider.dart';
 import 'providers/auth_provider.dart'; // İsteğe bağlı
+import 'providers/theme_provider.dart'; // Yeni provider
 
 // SplashScreen widget'ını import edin
 import 'package:rotaapp/splash_screen.dart'; // <<-- splash_screen.dart dosyasının yolunu doğru ayarlayın
@@ -23,6 +24,8 @@ void main() {
         ChangeNotifierProvider(
           create: (context) => AuthProvider(),
         ), // İsteğe bağlı
+        ChangeNotifierProvider(
+            create: (context) => ThemeProvider()), // Yeni provider
         // Diğer provider'lar buraya eklenecek
       ],
       child: const MyApp(),
@@ -35,17 +38,71 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return MaterialApp(
       title: 'Rota Uygulaması',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF66BB6A),
-        ), // Figma'daki yeşil tona yakın
+          seedColor: const Color(0xFF1A73E8), // Google Mavi
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
+        scaffoldBackgroundColor: Colors.white,
+        cardColor: const Color(0xFFF8F9FA),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Color(0xFF202124)),
+          bodyMedium: TextStyle(color: Color(0xFF5F6368)),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          iconTheme: IconThemeData(color: Color(0xFF202124)),
+          titleTextStyle: TextStyle(
+            color: Color(0xFF202124),
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        cardTheme: CardTheme(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       ),
-      // UYGULAMA BAŞLANGICINDA İLK GÖSTERİLECEK EKRAN ARTIK SPLASHSCREEN
-      home: const SplashScreen(), // <<-- Burası SplashScreen oldu
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF8AB4F8), // Google Koyu Mavi
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF202124),
+        cardColor: const Color(0xFF303134),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Color(0xFFE8EAED)),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF202124),
+          elevation: 0,
+          iconTheme: IconThemeData(color: Colors.white),
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        cardTheme: CardTheme(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      themeMode: themeProvider.themeMode,
+      home: const SplashScreen(),
     );
   }
 }
@@ -60,17 +117,15 @@ class MainScreenWrapper extends StatefulWidget {
 }
 
 class _MainScreenWrapperState extends State<MainScreenWrapper> {
-  int _selectedIndex = 0; // Seçili BNB öğesinin indeksi
+  int _selectedIndex = 0;
 
-  // Bottom Navigation Bar'daki ekranlar
   static final List<Widget> _screens = <Widget>[
-    const MapScreen(), // İlk ikon (Harita)
-    const VehicleScreen(), // İkinci ikon (Araç)
-    const ProfileScreen(), // Üçüncü ikon (Profil)
-    const SettingsScreen(), // Dördüncü ikon (Ayarlar)
+    const MapScreen(),
+    const VehicleScreen(),
+    const ProfileScreen(),
+    const SettingsScreen(),
   ];
 
-  // BNB öğesine tıklandığında
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
@@ -79,32 +134,55 @@ class _MainScreenWrapperState extends State<MainScreenWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    const Color overallBackgroundColor = Color(0xFFDCF0D8);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: Center(
-        child: _screens.elementAt(_selectedIndex), // Seçili ekranı göster
+        child: _screens.elementAt(_selectedIndex),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.location_on),
-            label: 'Harita',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.directions_car),
-            label: 'Araçlar',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Ayarlar'),
-        ],
-        currentIndex: _selectedIndex, // Seçili indeksi belirt
-        selectedItemColor:
-            Theme.of(context).colorScheme.primary, // Seçili ikon rengi
-        unselectedItemColor: Colors.grey, // Seçili olmayan ikon rengi
-        onTap: _onItemTapped, // Tıklama olayını yönet
-        type: BottomNavigationBarType.fixed, // İkon sayısı fazlaysa
-        backgroundColor: overallBackgroundColor, // BNB arka plan rengi
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF303134) : Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          items: const <BottomNavigationBarItem>[
+            BottomNavigationBarItem(
+              icon: Icon(Icons.location_on),
+              label: 'Harita',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.directions_car),
+              label: 'Araçlar',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person),
+              label: 'Profil',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings),
+              label: 'Ayarlar',
+            ),
+          ],
+          currentIndex: _selectedIndex,
+          selectedItemColor:
+              isDark ? const Color(0xFF8AB4F8) : const Color(0xFF1A73E8),
+          unselectedItemColor:
+              isDark ? const Color(0xFF9AA0A6) : const Color(0xFF5F6368),
+          onTap: _onItemTapped,
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          selectedLabelStyle:
+              const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          unselectedLabelStyle: const TextStyle(fontSize: 12),
+        ),
       ),
     );
   }
