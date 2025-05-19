@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/vehicle_provider.dart';
 import '../providers/route_provider.dart';
+import '../providers/theme_provider.dart';
 
 // Model importları (CompletedRoute ve Vehicle modellerine buradan erişiliyor)
 import '../models/vehicle.dart'; // Vehicle modelini import edin (Ortalama tüketim için)
@@ -19,7 +20,8 @@ class ProfileScreen extends StatelessWidget {
     String title,
     String value,
     IconData icon, {
-    bool isFullWidth = false, // isFullWidth şu an kullanımda değil ama metotta bırakıldı
+    bool isFullWidth =
+        false, // isFullWidth şu an kullanımda değil ama metotta bırakıldı
   }) {
     return Card(
       child: Padding(
@@ -45,79 +47,96 @@ class ProfileScreen extends StatelessWidget {
   }
 
   // Son yolculuk öğelerini oluşturan yardımcı metod (Opsiyonel, ListTile yerine Card içinde Column da olabilir)
-   Widget _buildCompletedRouteItem(BuildContext context, CompletedRoute route) {
-     return Card( // ListTile yerine Card içinde düzenleyelim
-        margin: const EdgeInsets.symmetric(vertical: 4.0), // Kartlar arasına boşluk
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                   Icon(Icons.route, size: 20, color: Theme.of(context).colorScheme.primary),
-                   const SizedBox(width: 8),
-                   Expanded(
-                     child: Text(
-                       '${route.startPoint} - ${route.endPoint}',
-                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                       maxLines: 1,
-                       overflow: TextOverflow.ellipsis,
-                     ),
-                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                       Text('Mesafe', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                       Text('${route.distance.toStringAsFixed(1)} km', style: const TextStyle(fontSize: 14)),
-                    ],
+  Widget _buildCompletedRouteItem(BuildContext context, CompletedRoute route) {
+    return Card(
+      // ListTile yerine Card içinde düzenleyelim
+      margin:
+          const EdgeInsets.symmetric(vertical: 4.0), // Kartlar arasına boşluk
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.route,
+                    size: 20, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${route.startPoint} - ${route.endPoint}',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                       Text('Yakıt', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                       Text('${route.consumption.toStringAsFixed(1)} L', style: const TextStyle(fontSize: 14)),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                       Text('Maliyet', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                       Text('${route.cost.toStringAsFixed(2)} ₺', // Maliyeti de gösteriyoruz
-                           style: TextStyle(
-                             fontSize: 14,
-                             fontWeight: FontWeight.bold,
-                             color: Theme.of(context).colorScheme.primary,
-                           )
-                       ),
-                    ],
-                  ),
-                   // Tamamlanma zamanını da gösterebiliriz
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                       Text('Tarih', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                       Text('${route.completedAt.day}/${route.completedAt.month}/${route.completedAt.year}', style: const TextStyle(fontSize: 14)),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Mesafe',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    Text('${route.distance.toStringAsFixed(1)} km',
+                        style: const TextStyle(fontSize: 14)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Yakıt',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    Text('${route.consumption.toStringAsFixed(1)} L',
+                        style: const TextStyle(fontSize: 14)),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Maliyet',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    Text(
+                        '${route.cost.toStringAsFixed(2)} ₺', // Maliyeti de gösteriyoruz
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        )),
+                  ],
+                ),
+                // Tamamlanma zamanını da gösterebiliriz
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Tarih',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    Text(
+                        '${route.completedAt.day}/${route.completedAt.month}/${route.completedAt.year}',
+                        style: const TextStyle(fontSize: 14)),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ),
-     );
-   }
-
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    const Color backgroundColor = Color(0xFFDCF0D8); // Figma'daki yeşil tonu
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final backgroundColor =
+        themeProvider.isDarkMode ? Colors.black : Colors.white;
 
     // Provider'ları dinleyerek gerekli verilere erişim
     final authProvider = Provider.of<AuthProvider>(context);
@@ -127,7 +146,8 @@ class ProfileScreen extends StatelessWidget {
     // İstatistikler
     // DEĞİŞİKLİK 1: routeProvider.routes yerine routeProvider.completedRoutes kullanıldı
     final totalTrips = routeProvider.completedRoutes.length;
-    final totalVehicles = vehicleProvider.vehicles.length; // VehicleProvider'daki vehicles listesi doğru
+    final totalVehicles = vehicleProvider
+        .vehicles.length; // VehicleProvider'daki vehicles listesi doğru
 
     // Ortalama tüketim hesaplama
     final double totalCityConsumptionSum = vehicleProvider.vehicles
@@ -137,14 +157,16 @@ class ProfileScreen extends StatelessWidget {
         .map((v) => v.highwayConsumption)
         .fold(0.0, (sum, consumption) => sum + consumption);
 
-    final double averageCityConsumption = totalVehicles == 0 ? 0.0 : totalCityConsumptionSum / totalVehicles;
-    final double averageHighwayConsumption = totalVehicles == 0 ? 0.0 : totalHighwayConsumptionSum / totalVehicles;
+    final double averageCityConsumption =
+        totalVehicles == 0 ? 0.0 : totalCityConsumptionSum / totalVehicles;
+    final double averageHighwayConsumption =
+        totalVehicles == 0 ? 0.0 : totalHighwayConsumptionSum / totalVehicles;
 
     // Ortalama olarak şehir içi ve şehir dışının ortalamasını alabiliriz veya sadece şehir içini gösterebiliriz
     // Şimdilik iki ortalamayı da hesapladık, sadece birini gösterebilirsiniz veya ikisini birden.
     // İstatistik kartında tek bir ortalama göstereceksek, basitleştirilmiş bir ortalama (örn: ikisinin ortalaması) kullanabiliriz.
-    final double simpleAverageConsumption = (averageCityConsumption + averageHighwayConsumption) / 2;
-
+    final double simpleAverageConsumption =
+        (averageCityConsumption + averageHighwayConsumption) / 2;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -168,7 +190,9 @@ class ProfileScreen extends StatelessWidget {
         children: [
           // Kullanıcı Bilgileri Kartı (Değişiklik Yok)
           Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // Köşeleri yuvarlak yap
+            shape: RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.circular(12)), // Köşeleri yuvarlak yap
             elevation: 2,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -177,7 +201,8 @@ class ProfileScreen extends StatelessWidget {
                   const CircleAvatar(
                     radius: 40,
                     backgroundColor: Colors.grey, // Avatar arkaplan rengi
-                    child: Icon(Icons.person, size: 40, color: Colors.white), // İkon rengi
+                    child: Icon(Icons.person,
+                        size: 40, color: Colors.white), // İkon rengi
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -238,7 +263,7 @@ class ProfileScreen extends StatelessWidget {
             Icons.local_gas_station,
             isFullWidth: true, // Bu kartın tam genişlik olması için
           ),
-           // Eğer isterseniz şehir içi ve şehir dışı ortalamalarını ayrı kartlarda gösterebilirsiniz
+          // Eğer isterseniz şehir içi ve şehir dışı ortalamalarını ayrı kartlarda gösterebilirsiniz
 
           const SizedBox(height: 24),
 
@@ -252,10 +277,13 @@ class ProfileScreen extends StatelessWidget {
           // Son Yolculuklar Listesi
           // DEĞİŞİKLİK 2: routeProvider.routes yerine routeProvider.completedRoutes kullanıldı
           // ve liste öğeleri _buildCompletedRouteItem yardımcı metodu ile oluşturuldu.
-          if (routeProvider.completedRoutes.isEmpty) // Listenin boş olup olmadığını kontrol et
+          if (routeProvider.completedRoutes
+              .isEmpty) // Listenin boş olup olmadığını kontrol et
             Card(
-               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // Köşeleri yuvarlak yap
-               elevation: 2,
+              shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(12)), // Köşeleri yuvarlak yap
+              elevation: 2,
               child: const Padding(
                 padding: EdgeInsets.all(16.0),
                 child: Center(child: Text('Henüz yolculuk kaydı bulunmuyor')),
@@ -263,25 +291,33 @@ class ProfileScreen extends StatelessWidget {
             )
           else
             // İlk 3 yolculuğu göster
-            ...routeProvider.completedRoutes.take(3).map(
-                  (route) => _buildCompletedRouteItem(context, route), // Yardımcı metodu kullan
-                ).toList(), // Map sonucunu Listeye çeviriyoruz
+            ...routeProvider.completedRoutes
+                .take(3)
+                .map(
+                  (route) => _buildCompletedRouteItem(
+                      context, route), // Yardımcı metodu kullan
+                )
+                .toList(), // Map sonucunu Listeye çeviriyoruz
 
-           // İsteğe bağlı: Tüm yolculukları gör butonu
-           if (routeProvider.completedRoutes.length > 3) // 3'ten fazla yolculuk varsa
-             Padding(
-               padding: const EdgeInsets.symmetric(vertical: 8.0),
-               child: TextButton(
-                 onPressed: () {
-                   // Tüm yolculukları gösteren başka bir ekrana yönlendirme yapılabilir.
-                   // Navigator.pushNamed(context, '/completedRoutes');
-                    ScaffoldMessenger.of(context).showSnackBar( // Geçici SnackBar
-                       const SnackBar(content: Text('Tüm yolculukları gör ekranına yönlendirilecek...')),
-                    );
-                 },
-                 child: const Text('Tümünü Gör'),
-               ),
-             ),
+          // İsteğe bağlı: Tüm yolculukları gör butonu
+          if (routeProvider.completedRoutes.length >
+              3) // 3'ten fazla yolculuk varsa
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: TextButton(
+                onPressed: () {
+                  // Tüm yolculukları gösteren başka bir ekrana yönlendirme yapılabilir.
+                  // Navigator.pushNamed(context, '/completedRoutes');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    // Geçici SnackBar
+                    const SnackBar(
+                        content: Text(
+                            'Tüm yolculukları gör ekranına yönlendirilecek...')),
+                  );
+                },
+                child: const Text('Tümünü Gör'),
+              ),
+            ),
         ],
       ),
     );

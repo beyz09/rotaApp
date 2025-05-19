@@ -9,6 +9,7 @@ import 'screens/settings_screen.dart';
 import 'providers/route_provider.dart';
 import 'providers/vehicle_provider.dart';
 import 'providers/auth_provider.dart'; // İsteğe bağlı
+import 'providers/theme_provider.dart';
 
 // SplashScreen widget'ını import edin
 import 'package:rotaapp/splash_screen.dart'; // <<-- splash_screen.dart dosyasının yolunu doğru ayarlayın
@@ -23,6 +24,7 @@ void main() {
         ChangeNotifierProvider(
           create: (context) => AuthProvider(),
         ), // İsteğe bağlı
+        ChangeNotifierProvider(create: (context) => ThemeProvider()),
         // Diğer provider'lar buraya eklenecek
       ],
       child: const MyApp(),
@@ -35,15 +37,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return MaterialApp(
       title: 'Rota Uygulaması',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF66BB6A),
-        ), // Figma'daki yeşil tona yakın
-        useMaterial3: true,
-      ),
+      theme: themeProvider.currentTheme,
       // UYGULAMA BAŞLANGICINDA İLK GÖSTERİLECEK EKRAN ARTIK SPLASHSCREEN
       home: const SplashScreen(), // <<-- Burası SplashScreen oldu
     );
@@ -79,7 +78,9 @@ class _MainScreenWrapperState extends State<MainScreenWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    const Color overallBackgroundColor = Color(0xFFDCF0D8);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final backgroundColor =
+        themeProvider.isDarkMode ? const Color(0xFF202124) : Colors.white;
 
     return Scaffold(
       body: Center(
@@ -104,7 +105,7 @@ class _MainScreenWrapperState extends State<MainScreenWrapper> {
         unselectedItemColor: Colors.grey, // Seçili olmayan ikon rengi
         onTap: _onItemTapped, // Tıklama olayını yönet
         type: BottomNavigationBarType.fixed, // İkon sayısı fazlaysa
-        backgroundColor: overallBackgroundColor, // BNB arka plan rengi
+        backgroundColor: backgroundColor, // BNB arka plan rengi
       ),
     );
   }
