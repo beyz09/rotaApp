@@ -15,6 +15,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final _formKey = GlobalKey<FormState>();
   final _brandController = TextEditingController();
   final _modelController = TextEditingController();
+  final _plateController = TextEditingController();
+  final _yearController = TextEditingController();
   final _fuelTypeController = TextEditingController();
   final _cityConsumptionController = TextEditingController();
   final _highwayConsumptionController = TextEditingController();
@@ -23,6 +25,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   void dispose() {
     _brandController.dispose();
     _modelController.dispose();
+    _plateController.dispose();
+    _yearController.dispose();
     _fuelTypeController.dispose();
     _cityConsumptionController.dispose();
     _highwayConsumptionController.dispose();
@@ -35,6 +39,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         id: DateTime.now().toString(),
         brand: _brandController.text,
         model: _modelController.text,
+        plate: _plateController.text,
+        year: int.parse(_yearController.text),
         fuelType: _fuelTypeController.text,
         cityConsumption: double.parse(_cityConsumptionController.text),
         highwayConsumption: double.parse(_highwayConsumptionController.text),
@@ -79,6 +85,42 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Lütfen model giriniz';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _plateController,
+                decoration: const InputDecoration(
+                  labelText: 'Plaka',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Lütfen plaka giriniz';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _yearController,
+                decoration: const InputDecoration(
+                  labelText: 'Üretim Yılı',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Lütfen üretim yılı giriniz';
+                  }
+                  if (int.tryParse(value) == null) {
+                    return 'Lütfen geçerli bir yıl giriniz';
+                  }
+                  final year = int.parse(value);
+                  if (year < 1900 || year > DateTime.now().year) {
+                    return 'Lütfen geçerli bir yıl giriniz';
                   }
                   return null;
                 },

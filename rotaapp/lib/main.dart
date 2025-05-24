@@ -9,6 +9,8 @@ import 'screens/settings_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/splash_screen.dart';
+import 'screens/privacy_policy_screen.dart';
+import 'screens/terms_of_service_screen.dart';
 import 'providers/route_provider.dart';
 import 'providers/vehicle_provider.dart';
 import 'providers/auth_provider.dart';
@@ -103,6 +105,8 @@ class MyApp extends StatelessWidget {
         '/main': (context) => const MainScreenWrapper(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
+        '/privacy-policy': (context) => const PrivacyPolicyScreen(),
+        '/terms-of-service': (context) => const TermsOfServiceScreen(),
       },
     );
   }

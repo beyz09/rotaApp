@@ -62,8 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Theme.of(context).colorScheme.primary,
-              Theme.of(context).colorScheme.secondary,
+              const Color(0xFF2196F3),
+              const Color(0xFF64B5F6),
             ],
           ),
         ),
@@ -84,10 +84,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.directions_car,
-                            size: 64,
-                            color: Theme.of(context).colorScheme.primary,
+                          Image.asset(
+                            'assets/app_icon/app_icon.png',
+                            width: 80,
+                            height: 80,
                           ),
                           const SizedBox(height: 24),
                           Text(

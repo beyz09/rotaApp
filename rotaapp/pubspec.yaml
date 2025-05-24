@@ -33,11 +33,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Uygulama içindeki görsel varlıkları buraya eklemeye devam edin
   assets:
     - assets/images/arkaplan2.png
-    # Buraya diğer uygulama içi görselleriniz gelebilir
-    # - assets/images/logo.png # Eğer uygulama içinde kullanacaksanız
+    - assets/app_icon/app_icon.png
 
 # UYGULAMA SİMGESİ (LAUNCHER ICON) AYARLARI BURADA
 flutter_launcher_icons:

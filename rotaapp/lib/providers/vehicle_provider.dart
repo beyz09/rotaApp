@@ -18,23 +18,35 @@ class VehicleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateVehicle(Vehicle updatedVehicle) {
+    final index = _vehicles.indexWhere((v) => v.id == updatedVehicle.id);
+    if (index != -1) {
+      _vehicles[index] = updatedVehicle;
+      notifyListeners();
+    }
+  }
+
+  void removeVehicle(String id) {
+    // ... existing code ...
+  }
+
   void selectVehicle(Vehicle vehicle) {
     _selectedVehicle = vehicle;
     notifyListeners();
   }
 
   void clearSelection() {
-     _selectedVehicle = null;
-     notifyListeners();
+    _selectedVehicle = null;
+    notifyListeners();
   }
 
   // Araç listesini yükleme (Başlangıçta veya eklendiğinde)
   // Bu metot, gerçek uygulamada bir storage_service'i çağıracaktır.
   Future<void> loadVehicles() async {
-     // Buraya yükleme mantığı gelecek
-     // _vehicles = await StorageService().loadVehicles();
-     // _selectedVehicle = _vehicles.isNotEmpty ? _vehicles.first : null; // İlkini seç
-     // notifyListeners();
+    // Buraya yükleme mantığı gelecek
+    // _vehicles = await StorageService().loadVehicles();
+    // _selectedVehicle = _vehicles.isNotEmpty ? _vehicles.first : null; // İlkini seç
+    // notifyListeners();
   }
-   // ... araç silme, düzenleme metotları eklenebilir
+  // ... araç silme, düzenleme metotları eklenebilir
 }

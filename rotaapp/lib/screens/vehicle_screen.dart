@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/vehicle_provider.dart';
 import '../models/vehicle.dart';
 import 'add_vehicle_screen.dart';
+import 'vehicle_detail_screen.dart';
 // import '../widgets/vehicle_info_widget.dart'; // Eğer ayrı bir widget oluşturulursa
 
 class VehicleScreen extends StatefulWidget {
@@ -13,6 +14,8 @@ class VehicleScreen extends StatefulWidget {
 }
 
 class _VehicleScreenState extends State<VehicleScreen> {
+  String? _selectedVehicleId;
+
   @override
   void initState() {
     super.initState();
@@ -30,6 +33,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
             id: 'car1',
             brand: 'TOYOTA',
             model: 'Corolla 1.6X',
+            plate: '34ABC123',
+            year: 2020,
             fuelType: 'Benzin',
             cityConsumption: 7.2,
             highwayConsumption: 5.1,
@@ -41,9 +46,24 @@ class _VehicleScreenState extends State<VehicleScreen> {
             id: 'car2',
             brand: 'FORD',
             model: 'Focus 1.5 Dizel',
+            plate: '34XYZ789',
+            year: 2021,
             fuelType: 'Dizel',
             cityConsumption: 6.0,
             highwayConsumption: 4.5,
+            vehicleType: 1,
+          ),
+        );
+        vehicleProvider.addVehicle(
+          Vehicle(
+            id: 'car3',
+            brand: 'MAZDA',
+            model: '3 2.0 Skyactiv-G',
+            plate: '34DEF456',
+            year: 2022,
+            fuelType: 'Benzin',
+            cityConsumption: 6.8,
+            highwayConsumption: 4.9,
             vehicleType: 1,
           ),
         );
@@ -51,84 +71,69 @@ class _VehicleScreenState extends State<VehicleScreen> {
     });
   }
 
+  void _onVehicleSelected(String vehicleId) {
+    setState(() {
+      _selectedVehicleId = vehicleId;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final vehicleProvider = Provider.of<VehicleProvider>(context);
-    final selectedVehicle = vehicleProvider.selectedVehicle;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(height: 16),
-            Text(
-              'Araç Bilgilerim',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).textTheme.bodyLarge?.color,
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (vehicleProvider.vehicles.isEmpty)
-              Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Araç bilgisi yok.',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Theme.of(context).textTheme.bodyLarge?.color,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      FloatingActionButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const AddVehicleScreen(),
-                            ),
-                          );
-                        },
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        child: const Icon(Icons.add),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 8.0,
-                  ),
-                  itemCount: vehicleProvider.vehicles.length,
-                  itemBuilder: (context, index) {
-                    final vehicle = vehicleProvider.vehicles[index];
-                    final isSelected =
-                        vehicleProvider.selectedVehicle?.id == vehicle.id;
-
-                    return _buildVehicleCard(context, vehicle, isSelected, () {
-                      vehicleProvider.selectVehicle(vehicle);
-                    });
-                  },
-                ),
-              ),
-          ],
-        ),
+      appBar: AppBar(
+        title: const Text('Araçlarım'),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddVehicleScreen()),
+          );
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Araç Ekle'),
+      ),
+      body: vehicleProvider.vehicles.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.directions_car_outlined,
+                    size: 64,
+                    color: isDark ? Colors.grey[600] : Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Henüz araç eklenmemiş',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Araç eklemek için sağ alttaki butonu kullanın',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: isDark ? Colors.grey[400] : Colors.grey[600],
+                        ),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: vehicleProvider.vehicles.length,
+              itemBuilder: (context, index) {
+                final vehicle = vehicleProvider.vehicles[index];
+                return _buildVehicleCard(
+                  context,
+                  vehicle,
+                  vehicle.id == _selectedVehicleId,
+                  () => _onVehicleSelected(vehicle.id),
+                );
+              },
+            ),
     );
   }
 
@@ -166,15 +171,30 @@ class _VehicleScreenState extends State<VehicleScreen> {
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    '${vehicle.brand} ${vehicle.model}',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).textTheme.bodyLarge?.color,
+                  Expanded(
+                    child: Text(
+                      '${vehicle.brand} ${vehicle.model}',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.info_outline),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => VehicleDetailScreen(
+                            vehicle: vehicle,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

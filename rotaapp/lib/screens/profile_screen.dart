@@ -232,17 +232,14 @@ class ProfileScreen extends StatelessWidget {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: () async {
-                            await authProvider.signOut();
-                            if (context.mounted) {
-                              Navigator.pushReplacementNamed(context, '/login');
-                            }
+                          onPressed: () {
+                            Navigator.pushReplacementNamed(context, '/login');
                           },
-                          icon: const Icon(Icons.logout),
-                          label: const Text('Çıkış Yap'),
+                          icon: const Icon(Icons.login),
+                          label: const Text('Oturum Aç'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor:
-                                isDark ? Colors.red[700] : Colors.red,
+                                Theme.of(context).colorScheme.primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
@@ -407,6 +404,28 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await authProvider.signOut();
+                    if (context.mounted) {
+                      Navigator.pushReplacementNamed(context, '/login');
+                    }
+                  },
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Çıkış Yap'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isDark ? Colors.red[700] : Colors.red,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
