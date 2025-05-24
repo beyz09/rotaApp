@@ -61,15 +61,6 @@ class _VehicleScreenState extends State<VehicleScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              height: 5,
-              width: 40,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
             const SizedBox(height: 16),
             Text(
               'Araç Bilgilerim',

@@ -20,6 +20,7 @@ dependencies:
   url_launcher: ^6.2.4
   cupertino_icons: ^1.0.2
   collection: ^1.17.0
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
@@ -34,7 +35,7 @@ flutter:
 
   # Uygulama içindeki görsel varlıkları buraya eklemeye devam edin
   assets:
-    - assets/images/arkaplan1.png
+    - assets/images/arkaplan2.png
     # Buraya diğer uygulama içi görselleriniz gelebilir
     # - assets/images/logo.png # Eğer uygulama içinde kullanacaksanız
 
