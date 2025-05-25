@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart'; // Firebase Core'u import et
+import 'firebase_options.dart'; // FlutterFire CLI ile oluşturulduysa
 
 // Ekranlarınızı ve provider'larınızı import edin
 import 'screens/map_screen.dart';
@@ -13,8 +15,13 @@ import 'providers/auth_provider.dart'; // İsteğe bağlı
 // SplashScreen widget'ını import edin
 import 'package:rotaapp/splash_screen.dart'; // <<-- splash_screen.dart dosyasının yolunu doğru ayarlayın
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Firebase'i başlatın
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions
+        .currentPlatform, // flutterfire configure ile oluşturulduysa
+  );
   runApp(
     MultiProvider(
       providers: [

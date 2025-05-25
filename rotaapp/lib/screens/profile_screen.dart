@@ -6,20 +6,26 @@ import '../providers/auth_provider.dart';
 import '../providers/vehicle_provider.dart';
 import '../providers/route_provider.dart';
 
-// Model importları (CompletedRoute ve Vehicle modellerine buradan erişiliyor)
-import '../models/vehicle.dart'; // Vehicle modelini import edin (Ortalama tüketim için)
-import '../models/route_option.dart'; // CompletedRoute buradan türetilmiş veya ilgili
+// Model importları
+import '../models/vehicle.dart'; // Bu import, vehicleProvider.vehicles.map((v) => v.cityConsumption) gibi erişimler için gerekli.
+// import '../models/route_option.dart'; // Eğer CompletedRoute veya başka bir yerde kullanılmıyorsa kaldırılabilir. Şimdilik bırakıyorum.
+
+// CompletedRoute sınıfı ya burada tanımlı olmalı ya da ayrı bir dosyadan import edilmeli.
+// Bir önceki mesajda route_provider.dart içinde tanımlıydı. Eğer öyleyse,
+// ve RouteProvider bu dosyadan import ediliyorsa, CompletedRoute'a erişim sağlanır.
+// Eğer CompletedRoute ayrı bir dosyadaysa, o dosyayı import etmelisiniz.
+// Şimdilik, CompletedRoute'un RouteProvider üzerinden erişilebilir olduğunu varsayıyorum
+// veya route_provider.dart içinde tanımlı olduğunu (bir önceki mesajınızdaki gibi).
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
-  // İstatistik kartlarını oluşturan yardımcı metod (Değişiklik Yok)
   Widget _buildStatCard(
     BuildContext context,
     String title,
     String value,
     IconData icon, {
-    bool isFullWidth = false, // isFullWidth şu an kullanımda değil ama metotta bırakıldı
+    bool isFullWidth = false,
   }) {
     return Card(
       child: Padding(
@@ -44,10 +50,9 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  // Son yolculuk öğelerini oluşturan yardımcı metod (Opsiyonel, ListTile yerine Card içinde Column da olabilir)
    Widget _buildCompletedRouteItem(BuildContext context, CompletedRoute route) {
-     return Card( // ListTile yerine Card içinde düzenleyelim
-        margin: const EdgeInsets.symmetric(vertical: 4.0), // Kartlar arasına boşluk
+     return Card(
+        margin: const EdgeInsets.symmetric(vertical: 4.0),
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Column(
@@ -89,7 +94,7 @@ class ProfileScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                        Text('Maliyet', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                       Text('${route.cost.toStringAsFixed(2)} ₺', // Maliyeti de gösteriyoruz
+                       Text('${route.cost.toStringAsFixed(2)} ₺',
                            style: TextStyle(
                              fontSize: 14,
                              fontWeight: FontWeight.bold,
@@ -98,7 +103,6 @@ class ProfileScreen extends StatelessWidget {
                        ),
                     ],
                   ),
-                   // Tamamlanma zamanını da gösterebiliriz
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -117,32 +121,26 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color backgroundColor = Color(0xFFDCF0D8); // Figma'daki yeşil tonu
+    const Color backgroundColor = Color(0xFFDCF0D8);
 
-    // Provider'ları dinleyerek gerekli verilere erişim
     final authProvider = Provider.of<AuthProvider>(context);
     final vehicleProvider = Provider.of<VehicleProvider>(context);
     final routeProvider = Provider.of<RouteProvider>(context);
 
-    // İstatistikler
-    // DEĞİŞİKLİK 1: routeProvider.routes yerine routeProvider.completedRoutes kullanıldı
     final totalTrips = routeProvider.completedRoutes.length;
-    final totalVehicles = vehicleProvider.vehicles.length; // VehicleProvider'daki vehicles listesi doğru
+    final totalVehicles = vehicleProvider.vehicles.length;
 
-    // Ortalama tüketim hesaplama
+    // DÜZELTME: Nullable değerler için ?? 0.0 eklendi
     final double totalCityConsumptionSum = vehicleProvider.vehicles
-        .map((v) => v.cityConsumption)
+        .map((v) => v.cityConsumption ?? 0.0) // Null ise 0.0 kullan
         .fold(0.0, (sum, consumption) => sum + consumption);
     final double totalHighwayConsumptionSum = vehicleProvider.vehicles
-        .map((v) => v.highwayConsumption)
+        .map((v) => v.highwayConsumption ?? 0.0) // Null ise 0.0 kullan
         .fold(0.0, (sum, consumption) => sum + consumption);
 
     final double averageCityConsumption = totalVehicles == 0 ? 0.0 : totalCityConsumptionSum / totalVehicles;
     final double averageHighwayConsumption = totalVehicles == 0 ? 0.0 : totalHighwayConsumptionSum / totalVehicles;
 
-    // Ortalama olarak şehir içi ve şehir dışının ortalamasını alabiliriz veya sadece şehir içini gösterebiliriz
-    // Şimdilik iki ortalamayı da hesapladık, sadece birini gösterebilirsiniz veya ikisini birden.
-    // İstatistik kartında tek bir ortalama göstereceksek, basitleştirilmiş bir ortalama (örn: ikisinin ortalaması) kullanabiliriz.
     final double simpleAverageConsumption = (averageCityConsumption + averageHighwayConsumption) / 2;
 
 
@@ -152,23 +150,12 @@ class ProfileScreen extends StatelessWidget {
         title: const Text('Profil'),
         backgroundColor: backgroundColor,
         elevation: 0,
-        // İsteğe bağlı: AppBar'a logo ekleyebilirsiniz
-        // actions: [
-        //   Padding(
-        //     padding: const EdgeInsets.all(8.0),
-        //     child: Image.asset(
-        //        'assets/images/app_logo.png', // Uygulama içi kullanacağınız logo yolunu yazın
-        //         height: 30, // Boyutunu ayarlayın
-        //     ),
-        //   ),
-        // ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          // Kullanıcı Bilgileri Kartı (Değişiklik Yok)
           Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // Köşeleri yuvarlak yap
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             elevation: 2,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -176,8 +163,8 @@ class ProfileScreen extends StatelessWidget {
                 children: [
                   const CircleAvatar(
                     radius: 40,
-                    backgroundColor: Colors.grey, // Avatar arkaplan rengi
-                    child: Icon(Icons.person, size: 40, color: Colors.white), // İkon rengi
+                    backgroundColor: Colors.grey,
+                    child: Icon(Icons.person, size: 40, color: Colors.white),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -192,7 +179,6 @@ class ProfileScreen extends StatelessWidget {
                     authProvider.currentUser?.email ?? 'Giriş yapılmamış',
                     style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                   ),
-                  // İsteğe bağlı: Profili Düzenle butonu eklenebilir
                 ],
               ),
             ),
@@ -200,14 +186,12 @@ class ProfileScreen extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // İstatistikler Başlığı (Değişiklik Yok)
           const Text(
             'İstatistikler',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
 
-          // İstatistik Kartları (Değişiklik Yok, sadece ortalama tüketim hesaplaması güncellendi)
           Row(
             children: [
               Expanded(
@@ -230,31 +214,31 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Ortalama tüketimi basit ortalama olarak gösterelim
           _buildStatCard(
             context,
             'Ortalama Tüketim',
-            '${simpleAverageConsumption.toStringAsFixed(1)} L/100km', // Basit ortalama kullanıldı
+            // Eğer cityConsumption ve highwayConsumption her zaman null ise,
+            // simpleAverageConsumption da 0.0 olacaktır.
+            // Bu durumda belki farklı bir metrik göstermek isteyebilirsiniz.
+            // Şimdilik olduğu gibi bırakıyorum.
+            totalVehicles > 0 && (averageCityConsumption > 0 || averageHighwayConsumption > 0)
+              ? '${simpleAverageConsumption.toStringAsFixed(1)} L/100km'
+              : 'Hesaplanamadı',
             Icons.local_gas_station,
-            isFullWidth: true, // Bu kartın tam genişlik olması için
+            isFullWidth: true,
           ),
-           // Eğer isterseniz şehir içi ve şehir dışı ortalamalarını ayrı kartlarda gösterebilirsiniz
 
           const SizedBox(height: 24),
 
-          // Son Yolculuklar Başlığı (Değişiklik Yok)
           const Text(
             'Son Yolculuklar',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
 
-          // Son Yolculuklar Listesi
-          // DEĞİŞİKLİK 2: routeProvider.routes yerine routeProvider.completedRoutes kullanıldı
-          // ve liste öğeleri _buildCompletedRouteItem yardımcı metodu ile oluşturuldu.
-          if (routeProvider.completedRoutes.isEmpty) // Listenin boş olup olmadığını kontrol et
+          if (routeProvider.completedRoutes.isEmpty)
             Card(
-               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), // Köşeleri yuvarlak yap
+               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                elevation: 2,
               child: const Padding(
                 padding: EdgeInsets.all(16.0),
@@ -262,20 +246,16 @@ class ProfileScreen extends StatelessWidget {
               ),
             )
           else
-            // İlk 3 yolculuğu göster
             ...routeProvider.completedRoutes.take(3).map(
-                  (route) => _buildCompletedRouteItem(context, route), // Yardımcı metodu kullan
-                ).toList(), // Map sonucunu Listeye çeviriyoruz
+                  (route) => _buildCompletedRouteItem(context, route),
+                ).toList(),
 
-           // İsteğe bağlı: Tüm yolculukları gör butonu
-           if (routeProvider.completedRoutes.length > 3) // 3'ten fazla yolculuk varsa
+           if (routeProvider.completedRoutes.length > 3)
              Padding(
                padding: const EdgeInsets.symmetric(vertical: 8.0),
                child: TextButton(
                  onPressed: () {
-                   // Tüm yolculukları gösteren başka bir ekrana yönlendirme yapılabilir.
-                   // Navigator.pushNamed(context, '/completedRoutes');
-                    ScaffoldMessenger.of(context).showSnackBar( // Geçici SnackBar
+                    ScaffoldMessenger.of(context).showSnackBar(
                        const SnackBar(content: Text('Tüm yolculukları gör ekranına yönlendirilecek...')),
                     );
                  },

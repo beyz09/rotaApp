@@ -629,7 +629,7 @@ class _MapScreenState extends State<MapScreen> with AutomaticKeepAliveClientMixi
                            const SizedBox(width: 4),
                           Expanded( // Metnin taşmasını önlemek için Expanded
                              child: Text(
-                                selectedVehicle != null ? '${selectedVehicle.brand} ${selectedVehicle.model}' : 'Yok',
+                                selectedVehicle != null ? '${selectedVehicle.marka} ${selectedVehicle.model}' : 'Yok',
                                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

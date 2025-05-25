@@ -9,58 +9,37 @@ class FuelCostCalculator {
   FuelCostCalculator({
     required this.vehicle,
     required this.fuelPricePerLiter,
-    this.cityPercentage = 50.0, // Varsayılan olarak %50 şehir içi
+    this.cityPercentage = 50.0,
   });
 
   // Rota maliyetini hesapla (min ve max değerler)
-  // additionalTollCost: Yakıt maliyetine ek olarak sabit ücretli yol maliyeti (TL)
   Map<String, double> calculateRouteCost(
     double distanceInKm, {
     double additionalTollCost = 0.0,
   }) {
-    // Şehir içi ve şehir dışı mesafeleri hesapla
-    final double cityDistance = (distanceInKm * cityPercentage) / 100;
-    final double highwayDistance = distanceInKm - cityDistance;
+    // Nullable alanlar için varsayılan değerler veya hata yönetimi
+    // Eğer bu alanlar null ise, bir varsayılan değer kullanabilir veya
+    // hesaplama yapılamayacağına dair bir hata/uyarı döndürebilirsiniz.
+    // Şimdilik, eğer null ise 0.0 olarak varsayalım, ama bu projenizin
+    // mantığına göre değişebilir.
+    final double vehicleCityConsumption = vehicle.cityConsumption ?? 0.0;
+    final double vehicleHighwayConsumption = vehicle.highwayConsumption ?? 0.0;
 
-    // Şehir içi ve şehir dışı yakıt tüketimlerini hesapla
-    final double cityFuelConsumption =
-        (cityDistance * vehicle.cityConsumption) / 100; // litre
-    final double highwayFuelConsumption =
-        (highwayDistance * vehicle.highwayConsumption) / 100; // litre
+    // Eğer tüketim değerleri 0 ise ve bu bir hata durumunu gösteriyorsa,
+    // burada erken bir dönüş yapabilir veya bir exception fırlatabilirsiniz.
+    // Örneğin:
+    // if (vehicleCityConsumption <= 0 || vehicleHighwayConsumption <= 0) {
+    //   print("Uyarı: Araç için geçerli şehir içi veya şehir dışı tüketim değeri bulunamadı.");
+    //   return {'minCost': additionalTollCost, 'maxCost': additionalTollCost}; // Sadece ek maliyet döner
+    // }
 
-    // Toplam yakıt tüketimi (litre)
-    final double totalFuelConsumption =
-        cityFuelConsumption + highwayFuelConsumption;
-
-    // Temel yakıt maliyeti (TL)
-    final double baseFuelCost = totalFuelConsumption * fuelPricePerLiter;
-
-    // Toplam temel maliyet (yakıt + ek maliyet)
-    final double baseTotalCost = baseFuelCost + additionalTollCost;
-
-    // Minimum ve maksimum maliyet hesaplama (%10 sapma ile)
-    // Sapmayı sadece yakıt maliyetine uygulayabiliriz veya toplam maliyete.
-    // Toplam maliyete uygulayalım, daha basit.
-    final double minCost = baseTotalCost * 0.9; // %10 daha az
-    final double maxCost = baseTotalCost * 1.1; // %10 daha fazla
-
-    // Maliyetin negatif olmamasına dikkat et
-    return {'minCost': minCost > 0 ? minCost : 0.0, 'maxCost': maxCost > 0 ? maxCost : 0.0};
-  }
-
-  // Rota detaylarını hesapla
-  // additionalTollCost: Yakıt maliyetine ek olarak sabit ücretli yol maliyeti (TL)
-  Map<String, dynamic> calculateRouteDetails(
-    double distanceInKm, {
-    double additionalTollCost = 0.0,
-  }) {
     final double cityDistance = (distanceInKm * cityPercentage) / 100;
     final double highwayDistance = distanceInKm - cityDistance;
 
     final double cityFuelConsumption =
-        (cityDistance * vehicle.cityConsumption) / 100;
+        (cityDistance * vehicleCityConsumption) / 100;
     final double highwayFuelConsumption =
-        (highwayDistance * vehicle.highwayConsumption) / 100;
+        (highwayDistance * vehicleHighwayConsumption) / 100;
 
     final double totalFuelConsumption =
         cityFuelConsumption + highwayFuelConsumption;
@@ -72,15 +51,50 @@ class FuelCostCalculator {
     final double maxCost = baseTotalCost * 1.1;
 
     return {
+      'minCost': minCost > 0 ? minCost : 0.0,
+      'maxCost': maxCost > 0 ? maxCost : 0.0
+    };
+  }
+
+  // Rota detaylarını hesapla
+  Map<String, dynamic> calculateRouteDetails(
+    double distanceInKm, {
+    double additionalTollCost = 0.0,
+  }) {
+    final double vehicleCityConsumption = vehicle.cityConsumption ?? 0.0;
+    final double vehicleHighwayConsumption = vehicle.highwayConsumption ?? 0.0;
+
+    // if (vehicleCityConsumption <= 0 || vehicleHighwayConsumption <= 0) {
+    //   // ... yukarıdaki gibi bir hata yönetimi veya varsayılan değer ataması ...
+    // }
+
+    final double cityDistance = (distanceInKm * cityPercentage) / 100;
+    final double highwayDistance = distanceInKm - cityDistance;
+
+    final double cityFuelLitres =
+        (cityDistance * vehicleCityConsumption) / 100;
+    final double highwayFuelLitres =
+        (highwayDistance * vehicleHighwayConsumption) / 100;
+
+    final double totalFuelLitres =
+        cityFuelLitres + highwayFuelLitres;
+
+    final double baseFuelCost = totalFuelLitres * fuelPricePerLiter;
+    final double baseTotalCost = baseFuelCost + additionalTollCost;
+
+    final double minCost = baseTotalCost * 0.9;
+    final double maxCost = baseTotalCost * 1.1;
+
+    return {
       'totalDistance': distanceInKm,
       'cityDistance': cityDistance,
       'highwayDistance': highwayDistance,
-      'cityFuelConsumption': cityFuelConsumption,
-      'highwayFuelConsumption': highwayFuelConsumption,
-      'totalFuelConsumption': totalFuelConsumption,
+      'cityFuelConsumption': cityFuelLitres, // Litre cinsinden
+      'highwayFuelConsumption': highwayFuelLitres, // Litre cinsinden
+      'totalFuelConsumption': totalFuelLitres, // Litre cinsinden
       'minCost': minCost > 0 ? minCost : 0.0,
       'maxCost': maxCost > 0 ? maxCost : 0.0,
-      'additionalTollCost': additionalTollCost, // Ek ücretli yol maliyetini de detaylara ekleyelim
+      'additionalTollCost': additionalTollCost,
     };
   }
 }
