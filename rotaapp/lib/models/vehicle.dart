@@ -3,9 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Vehicle {
   final String id;
-  final String marka;
+  final String marka; // map_screen.dart'ta 'brand' yerine bu kullanılacak
   final String seri;
-  final String model;
+  final String model; // map_screen.dart'ta bu doğru kullanılıyordu
   final int yil;
   final String yakitTipi;
   final String vites;
@@ -13,9 +13,8 @@ class Vehicle {
   final String motorGucu;
   final String motorHacmi;
   final String cekis;
-  // YENİ EKLENEN ALANLAR (nullable olabilirler)
-  final double? cityConsumption;
-  final double? highwayConsumption;
+  final double? cityConsumption; // fuel_cost_calculator.dart için önemli
+  final double? highwayConsumption; // fuel_cost_calculator.dart için önemli
 
   Vehicle({
     required this.id,
@@ -29,8 +28,8 @@ class Vehicle {
     required this.motorGucu,
     required this.motorHacmi,
     required this.cekis,
-    this.cityConsumption, // Constructor'a opsiyonel olarak eklendi
-    this.highwayConsumption, // Constructor'a opsiyonel olarak eklendi
+    this.cityConsumption,
+    this.highwayConsumption,
   });
 
   factory Vehicle.fromFirestore(DocumentSnapshot<Map<String, dynamic>> snapshot,
@@ -49,11 +48,9 @@ class Vehicle {
       motorHacmi: data?['Motor Hacmi'] as String? ?? 'Bilinmiyor',
       cekis: data?['Çekiş'] as String? ?? 'Bilinmiyor',
       // Firestore'daki alan adlarınızı buraya yazın.
-      // Eğer Firestore'da bu alanlar yoksa, bu satırlar null atayacaktır.
-      // Firestore'daki alan adının 'CityConsumption' ve 'HighwayConsumption' olduğunu varsayıyorum.
-      // Lütfen kendi Firestore alan adlarınızla değiştirin.
-      cityConsumption: (data?['CityConsumption'] as num?)?.toDouble(),
-      highwayConsumption: (data?['HighwayConsumption'] as num?)?.toDouble(),
+      // Örneğin: 'city_consumption' veya 'CityConsumption'
+      cityConsumption: (data?['CityConsumption'] as num?)?.toDouble(), // Firestore alan adını kontrol edin
+      highwayConsumption: (data?['HighwayConsumption'] as num?)?.toDouble(), // Firestore alan adını kontrol edin
     );
   }
 
@@ -69,9 +66,8 @@ class Vehicle {
       "Motor Gücü": motorGucu,
       "Motor Hacmi": motorHacmi,
       "Çekiş": cekis,
-      // Eğer bu alanlar null değilse Firestore'a yaz
-      if (cityConsumption != null) "CityConsumption": cityConsumption,
-      if (highwayConsumption != null) "HighwayConsumption": highwayConsumption,
+      if (cityConsumption != null) "CityConsumption": cityConsumption, // Firestore alan adını kontrol edin
+      if (highwayConsumption != null) "HighwayConsumption": highwayConsumption, // Firestore alan adını kontrol edin
     };
   }
 }

@@ -10,10 +10,10 @@ class VehicleProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   Vehicle? _selectedVehicle;
-  String _searchTerm = ""; // Arama terimini tutmak için
+  String _searchTerm = "";
 
-  List<Vehicle> get vehicles => _filteredVehicles; // UI artık filtrelenmiş listeyi kullanacak
-  List<Vehicle> get allVehicles => _allVehicles; // Tüm araçlara erişim (opsiyonel)
+  List<Vehicle> get vehicles => _filteredVehicles;
+  List<Vehicle> get allVehicles => _allVehicles;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   Vehicle? get selectedVehicle => _selectedVehicle;
@@ -26,11 +26,12 @@ class VehicleProvider with ChangeNotifier {
   Future<void> fetchVehicles() async {
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    // Başlangıçta notifyListeners() çağrısını kaldırdım, finally bloğu yeterli olacaktır.
+    // notifyListeners(); 
 
     try {
       final querySnapshot = await _firestore
-          .collection('araclar')
+          .collection('araclar') // Koleksiyon adınızın 'araclar' olduğundan emin olun
           .withConverter<Vehicle>(
             fromFirestore: Vehicle.fromFirestore,
             toFirestore: (Vehicle vehicle, _) => vehicle.toFirestore(),
@@ -38,8 +39,8 @@ class VehicleProvider with ChangeNotifier {
           .get();
 
       _allVehicles = querySnapshot.docs.map((doc) => doc.data()).toList();
-      _applySearchFilter(); // Arama filtresini uygula (başlangıçta boş olabilir)
-      print('VehicleProvider: ${_allVehicles.length} araç çekildi.');
+      _applySearchFilter(); 
+      debugPrint('VehicleProvider: ${_allVehicles.length} araç çekildi.');
 
       if (_filteredVehicles.isNotEmpty) {
         if (_selectedVehicle == null || !_filteredVehicles.any((v) => v.id == _selectedVehicle!.id)) {
@@ -51,10 +52,10 @@ class VehicleProvider with ChangeNotifier {
 
     } catch (error) {
       _errorMessage = "Araçlar yüklenirken bir hata oluştu: $error";
-      print('VehicleProvider Hata: $_errorMessage');
+      debugPrint('VehicleProvider Hata: $_errorMessage');
     } finally {
       _isLoading = false;
-      notifyListeners();
+      notifyListeners(); // Tüm işlemler bittikten sonra UI'ı güncelle
     }
   }
 
@@ -64,43 +65,116 @@ class VehicleProvider with ChangeNotifier {
   }
 
   Future<void> addNewVehicleToFirestore(Vehicle vehicleData) async {
-    // ... (Bu metot aynı kalabilir)
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners(); // Yükleme başladığını bildir
+    try {
+      final docRef = await _firestore.collection('araclar').add(vehicleData.toFirestore());
+      debugPrint('Yeni araç eklendi, ID: ${docRef.id}');
+      await fetchVehicles(); // Listeyi yenile, filtreyi uygula ve UI'ı güncelle (bu zaten notifyListeners içerir)
+    } catch (e) {
+      _errorMessage = "Yeni araç eklenirken hata: $e";
+      debugPrint('VehicleProvider Ekleme Hatası: $_errorMessage');
+      // Hata durumunda da isLoading'i false yap ve UI'ı güncelle
+      _isLoading = false; 
+      notifyListeners(); 
+    } 
+    // fetchVehicles() kendi finally bloğunda isLoading'i false yapıp notifyListeners çağıracağı için,
+    // buradaki finally bloğu gereksiz hale gelebilir. Eğer fetchVehicles() her zaman çağrılıyorsa.
+    // Ancak catch bloğunda fetchVehicles() çağrılmıyorsa, catch bloğu sonunda isLoading ve notifyListeners olmalı.
+    // Mevcut yapıda fetchVehicles() try bloğunda çağrıldığı için, catch bloğunda da isLoading ve notifyListeners olmalı.
+  }
+
+  // <<--- YENİ EKLENEN METOT --->>
+  Future<void> updateVehicle(Vehicle updatedVehicle) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners(); // Yükleme başladığını bildir
+
+    try {
+      await _firestore
+          .collection('araclar') // Firestore koleksiyon adınız
+          .doc(updatedVehicle.id) // Güncellenecek aracın ID'si
+          .update(updatedVehicle.toFirestore()); // Vehicle modelindeki toFirestore()
+      debugPrint('Araç güncellendi, ID: ${updatedVehicle.id}');
+
+      // Yerel listeleri de güncelle
+      final allVehicleIndex = _allVehicles.indexWhere((v) => v.id == updatedVehicle.id);
+      if (allVehicleIndex != -1) {
+        _allVehicles[allVehicleIndex] = updatedVehicle;
+      }
+      
+      // _applySearchFilter, _filteredVehicles listesini _allVehicles ve _searchTerm'e göre yeniden oluşturur.
+      // Bu yüzden _allVehicles güncellendikten sonra bu metodu çağırmak yeterlidir.
+      _applySearchFilter(); 
+
+      // Seçili aracı da güncelle (eğer güncellenen araç seçili ise)
+      if (_selectedVehicle?.id == updatedVehicle.id) {
+        _selectedVehicle = updatedVehicle;
+      }
+      
+    } catch (error) {
+      _errorMessage = "Araç güncellenirken hata: $error";
+      debugPrint('VehicleProvider Güncelleme Hatası: $_errorMessage');
+      // rethrow; // İsteğe bağlı olarak hatayı UI katmanına iletebilirsiniz
+    } finally {
+      _isLoading = false;
+      notifyListeners(); // Tüm işlemler bittikten sonra UI'ı güncelle
+    }
+  }
+  
+  // İsteğe bağlı: Araç silme metodu
+  Future<void> deleteVehicle(String vehicleId) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+
     try {
-      await _firestore.collection('araclar').add(vehicleData.toFirestore());
-      await fetchVehicles(); // Listeyi yenile ve filtreyi tekrar uygula
-    } catch (e) {
-      _errorMessage = "Yeni araç eklenirken hata: $e";
-      print('VehicleProvider Ekleme Hatası: $_errorMessage');
+      await _firestore.collection('araclar').doc(vehicleId).delete();
+      debugPrint('Araç silindi, ID: $vehicleId');
+
+      _allVehicles.removeWhere((vehicle) => vehicle.id == vehicleId);
+      _applySearchFilter(); // Silme sonrası filtreyi yeniden uygula
+
+      if (_selectedVehicle?.id == vehicleId) {
+        _selectedVehicle = _filteredVehicles.isNotEmpty ? _filteredVehicles.first : null;
+      }
+    } catch (error) {
+      _errorMessage = "Araç silinirken hata: $error";
+      debugPrint('VehicleProvider Silme Hatası: $_errorMessage');
+    } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // Arama terimini güncelleyen ve filtreyi uygulayan metot
+
   void searchVehicles(String term) {
     _searchTerm = term;
     _applySearchFilter();
+    // _applySearchFilter zaten notifyListeners() çağırıyor, bu yüzden burada tekrar gerek yok.
   }
 
-  // Arama filtresini uygulayan özel metot
   void _applySearchFilter() {
     if (_searchTerm.isEmpty) {
-      _filteredVehicles = List.from(_allVehicles); // Arama terimi boşsa tüm araçları göster
+      _filteredVehicles = List.from(_allVehicles);
     } else {
       final lowerCaseTerm = _searchTerm.toLowerCase();
       _filteredVehicles = _allVehicles.where((vehicle) {
-        // Marka, model veya seride arama yapabilirsiniz
         final brandMatch = vehicle.marka.toLowerCase().contains(lowerCaseTerm);
         final modelMatch = vehicle.model.toLowerCase().contains(lowerCaseTerm);
         final seriMatch = vehicle.seri.toLowerCase().contains(lowerCaseTerm);
-        // İsteğe bağlı: Yıl veya diğer alanlarda da arama eklenebilir
-        // final yilMatch = vehicle.yil.toString().contains(lowerCaseTerm);
-        return brandMatch || modelMatch || seriMatch; // || yilMatch;
+        return brandMatch || modelMatch || seriMatch;
       }).toList();
     }
-    notifyListeners(); // UI'ı güncelle
+
+    // Arama sonrası seçili aracın filtrelenmiş listede olup olmadığını kontrol et
+    if (_selectedVehicle != null && !_filteredVehicles.any((v) => v.id == _selectedVehicle!.id)) {
+        _selectedVehicle = _filteredVehicles.isNotEmpty ? _filteredVehicles.first : null;
+    } else if (_selectedVehicle == null && _filteredVehicles.isNotEmpty) {
+        // Eğer hiç seçili araç yoksa ve filtrelenmiş liste boş değilse ilkini seç
+        _selectedVehicle = _filteredVehicles.first;
+    }
+    notifyListeners(); // Filtreleme sonrası UI'ı her zaman güncelle
   }
 }

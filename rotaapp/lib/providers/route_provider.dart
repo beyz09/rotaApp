@@ -1,114 +1,80 @@
+// lib/providers/route_provider.dart
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route_option.dart';
-import '../models/vehicle.dart'; // CompletedRoute için Vehicle modeli gerekebilir
-// CompletedRoute için FuelCostCalculator modeli gerekebilir
-
-// Tamamlanan rota modeli
-class CompletedRoute {
-  final String id;
-  final String startPoint;
-  final String endPoint;
-  final double distance;
-  final double consumption; // Yakıt tüketimi (litre)
-  final double cost; // Maliyet (TL)
-  final DateTime completedAt;
-  final String vehicleId;
-
-  CompletedRoute({
-    required this.id,
-    required this.startPoint,
-    required this.endPoint,
-    required this.distance,
-    required this.consumption,
-    required this.cost,
-    required this.completedAt,
-    required this.vehicleId,
-  });
-
-  // Getter'lar
-  double get distanceInKm => distance;
-  int get durationInMinutes =>
-      (distance / 50 * 60).round(); // Ortalama 50 km/s hız varsayımı
-  double get fuelCost => cost;
-}
+// import '../models/vehicle.dart'; // Kullanılmıyorsa kaldırıldı
+import '../models/completed_route.dart'; // Doğru import
 
 class RouteProvider extends ChangeNotifier {
   LatLng? startLocation;
   LatLng? endLocation;
-  List<LatLng>? routePoints; // Seçili rotanın noktaları
-  String? routeDistance; // Seçili rotanın mesafesi
-  String? routeDuration; // Seçili rotanın süresi
-  List<RouteOption> routeOptions = []; // Bulunan tüm alternatif rotalar
-  RouteOption? selectedRouteOption; // Şu anda haritada gösterilen rota
+  List<LatLng>? routePoints;
+  String? routeDistance;
+  String? routeDuration;
+  List<RouteOption> routeOptions = [];
+  RouteOption? selectedRouteOption;
 
-  // Tamamlanan rotalar listesi
   final List<CompletedRoute> _completedRoutes = [];
 
-  // Getterlar
-  final List<Vehicle> _vehicles =
-      []; // VehicleProvider'dan gelen örnek liste, MapScreen'de Provider.of ile alınıyor ama burada da tutulabilir eğer ihtiyacı olursa
+  List<CompletedRoute> get completedRoutes => List.unmodifiable(_completedRoutes);
+  List<RouteOption> get routeOptionsList => List.unmodifiable(routeOptions);
 
-  // Getterlar
-  List<CompletedRoute> get completedRoutes => _completedRoutes;
-  List<RouteOption> get routeOptionsList => routeOptions;
-  // VehicleProvider'dan araç listesi ve seçili aracı al
-  // List<Vehicle> get vehicles => _vehicles; // Bu VehicleProvider'da olmalıydı, RouteProvider'da değil
-
-  // Başlangıç ve bitiş noktalarını ayarlar ve eski rota sonuçlarını temizler
   void setStartLocation(LatLng? location) {
     startLocation = location;
-    clearRouteResults(); // Başlangıç/bitiş değiştiğinde mevcut rota seçeneklerini temizle
-    notifyListeners(); // UI'ı güncelle (örn: marker'lar için)
+    clearRouteResults();
+    notifyListeners();
   }
 
   void setEndLocation(LatLng? location) {
     endLocation = location;
-    clearRouteResults(); // Başlangıç/bitiş değiştiğinde mevcut rota seçeneklerini temizle
-    notifyListeners(); // UI'ı güncelle (örn: marker'lar için)
+    clearRouteResults();
+    notifyListeners();
   }
 
-  // Rota seçeneklerini ayarlar ve ilkini seçer
   void setRouteOptions(List<RouteOption> options) {
     routeOptions = options;
     if (options.isNotEmpty) {
-      selectRouteOption(options.first); // Varsayılan olarak ilk rotayı seç
+      selectRouteOption(options.first);
     } else {
-      clearRouteResults(); // Seçenek yoksa rota sonuçlarını temizle
+      clearRouteResults();
     }
-    // notifyListeners(); // selectRouteOption zaten notifyListeners içeriyor
   }
 
-  // Belirli bir rota seçeneğini seçer
   void selectRouteOption(RouteOption option) {
     selectedRouteOption = option;
     routePoints = option.points;
     routeDistance = option.distance;
     routeDuration = option.duration;
-    notifyListeners(); // Seçili rota değiştiği için UI güncellemeli
+    notifyListeners();
   }
 
-  // Sadece rota hesaplama sonuçlarını temizler (başlangıç/varış noktalarını bırakır)
   void clearRouteResults() {
     routePoints = null;
     routeDistance = null;
     routeDuration = null;
     routeOptions = [];
     selectedRouteOption = null;
-    // notifyListeners(); // Bu metod tek başına çağrılırsa UI güncellemeli, diğer set metodları çağırıyorsa gerekmeyebilir
+    notifyListeners();
   }
 
-  // Tüm rota bilgilerini temizler (başlangıç/varış dahil)
   void clearAllRouteData() {
     startLocation = null;
     endLocation = null;
-    clearRouteResults(); // Rota sonuçlarını da temizle
-    notifyListeners(); // Tüm veri sıfırlandığı için UI güncellemeli
+    clearRouteResults();
+    notifyListeners();
   }
 
-  // Rota tamamlandığında çağrılacak metod
   void addCompletedRoute(CompletedRoute route) {
-    _completedRoutes.add(route);
+    _completedRoutes.insert(0, route); // En yeni en başa eklensin
+    // _completedRoutes.sort((a, b) => b.completedAt.compareTo(a.completedAt)); // Veya tarihe göre sırala
+    notifyListeners();
+  }
+
+  void clearSelectedRouteOptionOnly() { // profile_screen için eklendi
+    selectedRouteOption = null;
+    routePoints = null;
+    routeDistance = null;
+    routeDuration = null;
     notifyListeners();
   }
 }
