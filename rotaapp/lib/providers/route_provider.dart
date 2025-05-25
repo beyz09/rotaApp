@@ -2,27 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/route_option.dart';
 import '../models/vehicle.dart'; // CompletedRoute için Vehicle modeli gerekebilir
-import '../models/fuel_cost_calculator.dart'; // CompletedRoute için FuelCostCalculator modeli gerekebilir
-import '../models/fuel_cost_calculator.dart' as fcm; // Fuel Cost Model için örnek
+// CompletedRoute için FuelCostCalculator modeli gerekebilir
 
-
-// Tamamlanan rota modeli (Önceki kodunuzda vardı)
+// Tamamlanan rota modeli
 class CompletedRoute {
+  final String id;
   final String startPoint;
   final String endPoint;
   final double distance;
   final double consumption; // Yakıt tüketimi (litre)
-  final double cost;      // Maliyet (TL), tahmini aralığın ortası veya min/max olarak saklanabilir
+  final double cost; // Maliyet (TL)
   final DateTime completedAt;
+  final String vehicleId;
 
   CompletedRoute({
+    required this.id,
     required this.startPoint,
     required this.endPoint,
     required this.distance,
     required this.consumption,
-    required this.cost, // Maliyeti de ekledik
+    required this.cost,
     required this.completedAt,
+    required this.vehicleId,
   });
+
+  // Getter'lar
+  double get distanceInKm => distance;
+  int get durationInMinutes =>
+      (distance / 50 * 60).round(); // Ortalama 50 km/s hız varsayımı
+  double get fuelCost => cost;
 }
 
 class RouteProvider extends ChangeNotifier {
@@ -38,7 +46,8 @@ class RouteProvider extends ChangeNotifier {
   final List<CompletedRoute> _completedRoutes = [];
 
   // Getterlar
-  List<Vehicle> _vehicles = []; // Bu, ana vehicle.dart'taki Vehicle'dır. // VehicleProvider'dan gelen örnek liste, MapScreen'de Provider.of ile alınıyor ama burada da tutulabilir eğer ihtiyacı olursa
+  final List<Vehicle> _vehicles =
+      []; // VehicleProvider'dan gelen örnek liste, MapScreen'de Provider.of ile alınıyor ama burada da tutulabilir eğer ihtiyacı olursa
 
   // Getterlar
   List<CompletedRoute> get completedRoutes => _completedRoutes;

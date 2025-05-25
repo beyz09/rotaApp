@@ -5,11 +5,11 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color backgroundColor = Color(0xFFDCF0D8); // Figma'daki yeşil tonu
+    const Color backgroundColor = Color(0xFFDCF0D8); 
 
-    return Scaffold(
+    return const Scaffold(
       backgroundColor: backgroundColor,
-      body: const Center(
+      body: Center(
         child: Text(
           'Ana Sayfa',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),

@@ -8,12 +8,15 @@ import 'screens/map_screen.dart';
 import 'screens/vehicle_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
+import 'screens/splash_screen.dart';
+import 'screens/privacy_policy_screen.dart';
+import 'screens/terms_of_service_screen.dart';
 import 'providers/route_provider.dart';
 import 'providers/vehicle_provider.dart';
-import 'providers/auth_provider.dart'; // İsteğe bağlı
-
-// SplashScreen widget'ını import edin
-import 'package:rotaapp/splash_screen.dart'; // <<-- splash_screen.dart dosyasının yolunu doğru ayarlayın
+import 'providers/auth_provider.dart';
+import 'providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,10 +30,8 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (context) => RouteProvider()),
         ChangeNotifierProvider(create: (context) => VehicleProvider()),
-        ChangeNotifierProvider(
-          create: (context) => AuthProvider(),
-        ), // İsteğe bağlı
-        // Diğer provider'lar buraya eklenecek
+        ChangeNotifierProvider(create: (context) => AuthProvider()),
+        ChangeNotifierProvider(create: (context) => ThemeProvider()),
       ],
       child: const MyApp(),
     ),
@@ -42,17 +43,78 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
     return MaterialApp(
       title: 'Rota Uygulaması',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF66BB6A),
-        ), // Figma'daki yeşil tona yakın
+          seedColor: const Color(0xFF1A73E8),
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
+        scaffoldBackgroundColor: Colors.white,
+        cardColor: const Color(0xFFF8F9FA),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Color(0xFF202124)),
+          bodyMedium: TextStyle(color: Color(0xFF5F6368)),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          iconTheme: IconThemeData(color: Color(0xFF202124)),
+          titleTextStyle: TextStyle(
+            color: Color(0xFF202124),
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        cardTheme: CardTheme(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       ),
-      // UYGULAMA BAŞLANGICINDA İLK GÖSTERİLECEK EKRAN ARTIK SPLASHSCREEN
-      home: const SplashScreen(), // <<-- Burası SplashScreen oldu
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF8AB4F8),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF202124),
+        cardColor: const Color(0xFF303134),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Color(0xFFE8EAED)),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF202124),
+          elevation: 0,
+          iconTheme: IconThemeData(color: Colors.white),
+          titleTextStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        cardTheme: CardTheme(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      themeMode: themeProvider.themeMode,
+      home: const SplashScreen(),
+      routes: {
+        '/main': (context) => const MainScreenWrapper(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/privacy-policy': (context) => const PrivacyPolicyScreen(),
+        '/terms-of-service': (context) => const TermsOfServiceScreen(),
+      },
     );
   }
 }
@@ -67,51 +129,92 @@ class MainScreenWrapper extends StatefulWidget {
 }
 
 class _MainScreenWrapperState extends State<MainScreenWrapper> {
-  int _selectedIndex = 0; // Seçili BNB öğesinin indeksi
+  int _selectedIndex = 0;
 
-  // Bottom Navigation Bar'daki ekranlar
   static final List<Widget> _screens = <Widget>[
-    const MapScreen(), // İlk ikon (Harita)
-    const VehicleScreen(), // İkinci ikon (Araç)
-    const ProfileScreen(), // Üçüncü ikon (Profil)
-    const SettingsScreen(), // Dördüncü ikon (Ayarlar)
+    const MapScreen(),
+    const VehicleScreen(),
+    const ProfileScreen(),
+    const SettingsScreen(),
   ];
 
-  // BNB öğesine tıklandığında
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
+    Navigator.pop(context); // Drawer'ı kapat
   }
 
   @override
   Widget build(BuildContext context) {
-    const Color overallBackgroundColor = Color(0xFFDCF0D8);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      body: Center(
-        child: _screens.elementAt(_selectedIndex), // Seçili ekranı göster
+      appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () {
+              Scaffold.of(context).openDrawer();
+            },
+          ),
+        ),
+        title: const Text('RotaApp'),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.location_on),
-            label: 'Harita',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.directions_car),
-            label: 'Araçlar',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Ayarlar'),
-        ],
-        currentIndex: _selectedIndex, // Seçili indeksi belirt
-        selectedItemColor:
-            Theme.of(context).colorScheme.primary, // Seçili ikon rengi
-        unselectedItemColor: Colors.grey, // Seçili olmayan ikon rengi
-        onTap: _onItemTapped, // Tıklama olayını yönet
-        type: BottomNavigationBarType.fixed, // İkon sayısı fazlaysa
-        backgroundColor: overallBackgroundColor, // BNB arka plan rengi
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color:
+                    isDark ? const Color(0xFF303134) : const Color(0xFF1A73E8),
+              ),
+              child: const Text(
+                'Hoş Geldiniz',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.location_on),
+              title: const Text('Harita'),
+              selected: _selectedIndex == 0,
+              selectedColor:
+                  isDark ? const Color(0xFF8AB4F8) : const Color(0xFF1A73E8),
+              onTap: () => _onItemTapped(0),
+            ),
+            ListTile(
+              leading: const Icon(Icons.directions_car),
+              title: const Text('Araçlar'),
+              selected: _selectedIndex == 1,
+              selectedColor:
+                  isDark ? const Color(0xFF8AB4F8) : const Color(0xFF1A73E8),
+              onTap: () => _onItemTapped(1),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Profil'),
+              selected: _selectedIndex == 2,
+              selectedColor:
+                  isDark ? const Color(0xFF8AB4F8) : const Color(0xFF1A73E8),
+              onTap: () => _onItemTapped(2),
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Ayarlar'),
+              selected: _selectedIndex == 3,
+              selectedColor:
+                  isDark ? const Color(0xFF8AB4F8) : const Color(0xFF1A73E8),
+              onTap: () => _onItemTapped(3),
+            ),
+          ],
+        ),
+      ),
+      body: Center(
+        child: _screens.elementAt(_selectedIndex),
       ),
     );
   }

@@ -21,6 +21,8 @@ dependencies:
   provider: ^6.1.1
   url_launcher: ^6.2.4
   cupertino_icons: ^1.0.2
+  collection: ^1.17.0
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
@@ -33,11 +35,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Uygulama içindeki görsel varlıkları buraya eklemeye devam edin
   assets:
-    - assets/images/arkaplan1.png
-    # Buraya diğer uygulama içi görselleriniz gelebilir
-    # - assets/images/logo.png # Eğer uygulama içinde kullanacaksanız
+    - assets/images/arkaplan2.png
+    - assets/app_icon/app_icon.png
 
 # UYGULAMA SİMGESİ (LAUNCHER ICON) AYARLARI BURADA
 flutter_launcher_icons:

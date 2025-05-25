@@ -28,7 +28,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _startLoadingAndNavigate() async {
     // Minimum splash süresi
-    final minDurationFuture = Future.delayed(const Duration(seconds: 2)); // En az 2 saniye göster
+    final minDurationFuture =
+        Future.delayed(const Duration(seconds: 2)); // En az 2 saniye göster
 
     // Konum yükleme işlemi
     final locationLoadingFuture = _initializeLocationAndMapProviders();
@@ -55,15 +56,16 @@ class _SplashScreenState extends State<SplashScreen> {
           _errorMessage = e.toString();
           // Hata gösterildikten sonra 3 saniye bekleyip yine de ana ekrana geç (veya kalıcı bir hata ekranı gösterebilirsiniz)
           Timer(const Duration(seconds: 3), () {
-             if (mounted) {
-               // Eğer hala hata ekranındaysak ve bu timer tetiklenirse, ana ekrana geç.
-               // setState ile hata mesajını null yapmak veya tekrar yüklemeye geçmek gibi
-               // farklı stratejiler de izlenebilir, bu örnekte direkt geçiş yapılıyor.
-                Navigator.pushReplacement(
-                 context,
-                 MaterialPageRoute(builder: (context) => const MainScreenWrapper()),
-               );
-             }
+            if (mounted) {
+              // Eğer hala hata ekranındaysak ve bu timer tetiklenirse, ana ekrana geç.
+              // setState ile hata mesajını null yapmak veya tekrar yüklemeye geçmek gibi
+              // farklı stratejiler de izlenebilir, bu örnekte direkt geçiş yapılıyor.
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const MainScreenWrapper()),
+              );
+            }
           });
         });
       }
@@ -82,54 +84,58 @@ class _SplashScreenState extends State<SplashScreen> {
         if (!isLocationEnabled) {
           // Kullanıcıya daha iyi bir hata mesajı gösterilebilir veya ayarlar sayfasına yönlendirilebilir.
           // Şimdilik sadece hata fırlatıyoruz.
-          throw Exception('Konum servisleri kapalı. Lütfen telefonunuzun ayarlarından açın.');
+          throw Exception(
+              'Konum servisleri kapalı. Lütfen telefonunuzun ayarlarından açın.');
         }
 
         // Konum almayı deneme
         Position position;
         try {
-           position = await Geolocator.getCurrentPosition(
+          position = await Geolocator.getCurrentPosition(
             desiredAccuracy: LocationAccuracy.high,
           ).timeout(
             const Duration(seconds: 15), // 15 saniye zaman aşımı
             onTimeout: () {
-              throw Exception('Konum alınırken zaman aşımı oluştu. Lütfen daha sonra tekrar deneyin.');
+              throw Exception(
+                  'Konum alınırken zaman aşımı oluştu. Lütfen daha sonra tekrar deneyin.');
             },
           );
         } on PermissionDeniedException {
-             // Konum izni verildi ama servis yine de reddedildi (çok nadir)
-             throw Exception('Konum izni reddedildi.');
+          // Konum izni verildi ama servis yine de reddedildi (çok nadir)
+          throw Exception('Konum izni reddedildi.');
         } on LocationServiceDisabledException {
-             // isLocationServiceEnabled kontrol edilse de bazen bu exception fırlatılabilir
-             throw Exception('Konum servisleri kapalı. Lütfen telefonunuzun ayarlarından açın.');
+          // isLocationServiceEnabled kontrol edilse de bazen bu exception fırlatılabilir
+          throw Exception(
+              'Konum servisleri kapalı. Lütfen telefonunuzun ayarlarından açın.');
         } catch (e) {
-             // Diğer olası hatalar (GPS sinyali yokluğu vb.)
-             throw Exception('Konum alınamadı: ${e.toString()}');
+          // Diğer olası hatalar (GPS sinyali yokluğu vb.)
+          throw Exception('Konum alınamadı: ${e.toString()}');
         }
-
 
         if (mounted) {
           final currentLocation = LatLng(position.latitude, position.longitude);
           // ignore: use_build_context_synchronously // setState veya context kullanımı güvenli
-          Provider.of<RouteProvider>(context, listen: false).setStartLocation(currentLocation);
+          Provider.of<RouteProvider>(context, listen: false)
+              .setStartLocation(currentLocation);
         }
       } else if (status.isDenied) {
-          // İzin reddedildiğinde
-           throw Exception('Konum izni reddedildi. Uygulama bazı özellikler için konum iznine ihtiyaç duyar.');
+        // İzin reddedildiğinde
+        throw Exception(
+            'Konum izni reddedildi. Uygulama bazı özellikler için konum iznine ihtiyaç duyar.');
       } else if (status.isPermanentlyDenied) {
-           // İzin kalıcı olarak reddedildiğinde (kullanıcının ayarlara gitmesi gerekir)
-           throw Exception('Konum izni kalıcı olarak reddedildi. Lütfen telefonunuzun ayarlarından izin verin.');
+        // İzin kalıcı olarak reddedildiğinde (kullanıcının ayarlara gitmesi gerekir)
+        throw Exception(
+            'Konum izni kalıcı olarak reddedildi. Lütfen telefonunuzun ayarlarından izin verin.');
       } else {
-          // Diğer durumlar (restricted vb.)
-          throw Exception('Konum izni durumu beklenmedik: ${status.toString()}');
+        // Diğer durumlar (restricted vb.)
+        throw Exception('Konum izni durumu beklenmedik: ${status.toString()}');
       }
     } catch (e) {
-       // initializeLocationAndMapProviders içindeki tüm hataları yakalayıp yeniden fırlatıyoruz.
-       // Bu, _startLoadingAndNavigate fonksiyonunun catch bloğuna düşmesini sağlar.
-       rethrow; // Hatanın orijinalini koruyarak yeniden fırlatır
+      // initializeLocationAndMapProviders içindeki tüm hataları yakalayıp yeniden fırlatıyoruz.
+      // Bu, _startLoadingAndNavigate fonksiyonunun catch bloğuna düşmesini sağlar.
+      rethrow; // Hatanın orijinalini koruyarak yeniden fırlatır
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -143,13 +149,14 @@ class _SplashScreenState extends State<SplashScreen> {
         height: double.infinity,
         // Arka plan rengini kaldırıp, decoration ekliyoruz
         // color: Colors.white, // Bunu kaldırın
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('assets/images/arkaplan1.png'), // Arka plan resmi
+            image: AssetImage('assets/images/arkaplan2.png'), // Arka plan resmi
             fit: BoxFit.cover, // Resmi ekranı kaplayacak şekilde ölçekle
           ),
         ),
-        child: Center( // Yükleme göstergesi ve hata mesajı ortada kalmaya devam edecek
+        child: Center(
+          // Yükleme göstergesi ve hata mesajı ortada kalmaya devam edecek
           child: _isLoading
               ? Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -166,7 +173,8 @@ class _SplashScreenState extends State<SplashScreen> {
                         child: Text(
                           _errorMessage!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.red, fontSize: 14),
+                          style:
+                              const TextStyle(color: Colors.red, fontSize: 14),
                         ),
                       ),
                   ],
@@ -175,7 +183,8 @@ class _SplashScreenState extends State<SplashScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min, // İçeriği kadar yer kapla
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 60),
+                    const Icon(Icons.error_outline,
+                        color: Colors.red, size: 60),
                     const SizedBox(height: 16),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
