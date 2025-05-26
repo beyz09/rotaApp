@@ -1130,9 +1130,12 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   // Verilen rota için harici bir navigasyon uygulaması (Google Maps) başlatır
+  // Verilen rota için harici bir navigasyon uygulaması (Google Maps) başlatır
   void _launchNavigation(RouteOption route) async {
-    if (route.points.isEmpty) { // Rota noktası yoksa hata göster
+    debugPrint("[NAV_LAUNCHER] Attempting to launch navigation...");
+    if (route.points.isEmpty) {
       _showErrorSnackBar('Navigasyon başlatılamadı: Rota bilgisi eksik.', isWarning: true);
+      debugPrint("[NAV_LAUNCHER] Error: Route points are empty.");
       return;
     }
     // Başlangıç ve varış koordinatlarını al
@@ -1143,14 +1146,37 @@ class _MapScreenState extends State<MapScreen> {
     // Google Maps URL'ini oluştur
     final googleMapsUrl = Uri.parse('https://www.google.com/maps/dir/?api=1&origin=$origin&destination=$destination&travelmode=driving');
 
+    debugPrint("[NAV_LAUNCHER] Target URL: $googleMapsUrl");
+
     try {
-      if (await canLaunchUrl(googleMapsUrl)) { // URL açılabilir mi kontrol et
-        await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication); // Harici uygulamada aç
+      bool canLaunch = await canLaunchUrl(googleMapsUrl);
+      debugPrint("[NAV_LAUNCHER] canLaunchUrl('$googleMapsUrl') result: $canLaunch");
+
+      if (canLaunch) {
+        // URL açılabilir, şimdi başlatmayı dene
+        bool launched = await launchUrl(
+          googleMapsUrl,
+          mode: LaunchMode.externalApplication, // Harici uygulamada aç
+        );
+        debugPrint("[NAV_LAUNCHER] launchUrl('$googleMapsUrl') result: $launched");
+
+        if (!launched) {
+          // canLaunchUrl true idi ama launchUrl false döndü.
+          _showErrorSnackBar('Harita uygulaması başlatılamadı (sistem başlatmayı reddetti).');
+          debugPrint("[NAV_LAUNCHER] Error: launchUrl returned false. The OS might have failed to launch the app.");
+        }
+        // `launched` true ise, işlem başarılı kabul edilir.
       } else {
-        throw 'Harita uygulaması açılamadı.'; // Açılamazsa hata fırlat
+        // canLaunchUrl false döndü. Bu genellikle manifest/plist yapılandırma eksikliğinden kaynaklanır.
+        _showErrorSnackBar('Bu URL için uygun bir uygulama bulunamadı veya başlatma izni yok.');
+        debugPrint("[NAV_LAUNCHER] Error: canLaunchUrl returned false. " +
+            "Please check <queries> in AndroidManifest.xml (for Android 11+) " +
+            "or LSApplicationQueriesSchemes in Info.plist (for iOS).");
       }
     } catch (e) {
-      _showErrorSnackBar('Harita başlatılamadı.');
+      // canLaunchUrl veya launchUrl sırasında bir istisna oluştu.
+      _showErrorSnackBar('Harita başlatılırken bir hata oluştu: ${e.toString()}');
+      debugPrint("[NAV_LAUNCHER] Exception during URL launch: $e");
     }
   }
 
