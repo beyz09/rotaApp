@@ -34,7 +34,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
   @override
   Widget build(BuildContext context) {
     final vehicleProvider = context.watch<VehicleProvider>();
-    const Color backgroundColor = Color(0xFFDCF0D8);
+    const Color backgroundColor = Colors.white;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -44,7 +44,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh, color: Theme.of(context).colorScheme.primary),
+            icon: Icon(Icons.refresh,
+                color: Theme.of(context).colorScheme.primary),
             onPressed: () {
               _searchController.clear(); // Arama terimini temizle
               vehicleProvider.fetchVehicles();
@@ -52,7 +53,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
           ),
         ],
       ),
-      body: Column( // Ana yapıyı Column olarak değiştirdik
+      body: Column(
+        // Ana yapıyı Column olarak değiştirdik
         children: [
           // ARAMA ÇUBUĞU
           Padding(
@@ -61,20 +63,24 @@ class _VehicleScreenState extends State<VehicleScreen> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Marka, model veya seri ara...',
+                hintStyle:
+                    TextStyle(color: const Color.fromARGB(255, 116, 116, 116)),
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(25.0),
                   borderSide: BorderSide.none,
                 ),
                 filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
+                fillColor: Colors.grey[200],
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
                 // Arama çubuğunu temizleme butonu (opsiyonel)
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: () {
-                          _searchController.clear(); // Provider'ı tetikler (listener sayesinde)
+                          _searchController
+                              .clear(); // Provider'ı tetikler (listener sayesinde)
                         },
                       )
                     : null,
@@ -82,7 +88,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
             ),
           ),
           // ARAÇ LİSTESİ
-          Expanded( // ListView'ın Column içinde doğru boyutlanması için
+          Expanded(
+            // ListView'ın Column içinde doğru boyutlanması için
             child: _buildVehicleListBody(context, vehicleProvider),
           ),
         ],
@@ -103,7 +110,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
               // o zaman burada fetchVehicles'ı tekrar çağırmak gerekebilir.
               // Şimdilik provider'daki mantığa güveniyoruz.
               // vehicleProvider.fetchVehicles();
-              _searchController.clear(); // Yeni araç eklendiğinde arama temizlenebilir
+              _searchController
+                  .clear(); // Yeni araç eklendiğinde arama temizlenebilir
             }
           });
         },
@@ -114,7 +122,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
     );
   }
 
-  Widget _buildVehicleListBody(BuildContext context, VehicleProvider vehicleProvider) {
+  Widget _buildVehicleListBody(
+      BuildContext context, VehicleProvider vehicleProvider) {
     // ... (Bu metot bir önceki cevaptaki gibi kalabilir, sadece vehicles listesini kullanır)
     // ÖNEMLİ: Bu metot artık vehicleProvider.vehicles (filtrelenmiş liste) kullanmalı.
     // Zaten öyleydi, bir değişiklik yapmaya gerek yok.
@@ -124,7 +133,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
     }
 
     if (vehicleProvider.errorMessage != null) {
-      return Center( /* ... Hata mesajı ... */ );
+      return Center(/* ... Hata mesajı ... */);
     }
 
     // Arama sonucu boşsa ama yükleme devam etmiyorsa ve genel araç listesi de boş değilse
@@ -132,7 +141,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
     if (vehicleProvider.vehicles.isEmpty &&
         !vehicleProvider.isLoading &&
         vehicleProvider.searchTerm.isNotEmpty && // Arama yapılıyorsa
-        vehicleProvider.allVehicles.isNotEmpty) { // Ama genel liste doluysa
+        vehicleProvider.allVehicles.isNotEmpty) {
+      // Ama genel liste doluysa
       return Center(
         child: Text(
           '"${vehicleProvider.searchTerm}" için sonuç bulunamadı.',
@@ -142,17 +152,20 @@ class _VehicleScreenState extends State<VehicleScreen> {
       );
     }
 
-
     if (vehicleProvider.vehicles.isEmpty && !vehicleProvider.isLoading) {
-      return Center( /* ... Kayıtlı araç bulunamadı mesajı ve ekle butonu ... */ );
+      return Center(
+          /* ... Kayıtlı araç bulunamadı mesajı ve ekle butonu ... */);
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 80.0), // FAB için altta boşluk
-      itemCount: vehicleProvider.vehicles.length, // Filtrelenmiş listeyi kullanır
+      padding: const EdgeInsets.only(
+          left: 8.0, right: 8.0, bottom: 80.0), // FAB için altta boşluk
+      itemCount:
+          vehicleProvider.vehicles.length, // Filtrelenmiş listeyi kullanır
       itemBuilder: (context, index) {
         final Vehicle vehicle = vehicleProvider.vehicles[index];
-        final bool isSelected = vehicleProvider.selectedVehicle?.id == vehicle.id;
+        final bool isSelected =
+            vehicleProvider.selectedVehicle?.id == vehicle.id;
 
         return Card(
           // ... (Card içeriği aynı kalabilir) ...
@@ -161,7 +174,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: isSelected
-                ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 2.5)
+                ? BorderSide(
+                    color: Theme.of(context).colorScheme.primary, width: 2.5)
                 : BorderSide.none,
           ),
           child: InkWell(
@@ -184,16 +198,21 @@ class _VehicleScreenState extends State<VehicleScreen> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: isSelected ? Theme.of(context).colorScheme.primary : Colors.black87,
+                            color: isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.black87,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (isSelected)
                         Chip(
-                          label: const Text('Seçili', style: TextStyle(color: Colors.white)),
-                          backgroundColor: Theme.of(context).colorScheme.primary,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          label: const Text('Seçili',
+                              style: TextStyle(color: Colors.white)),
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
                         )
                     ],
                   ),
@@ -201,7 +220,8 @@ class _VehicleScreenState extends State<VehicleScreen> {
                   Text('Yıl: ${vehicle.yil}'),
                   Text('Yakıt: ${vehicle.yakitTipi} - Vites: ${vehicle.vites}'),
                   Text('Motor: ${vehicle.motorGucu} / ${vehicle.motorHacmi}'),
-                  Text('Kasa Tipi: ${vehicle.kasaTipi} - Çekiş: ${vehicle.cekis}'),
+                  Text(
+                      'Kasa Tipi: ${vehicle.kasaTipi} - Çekiş: ${vehicle.cekis}'),
                 ],
               ),
             ),
@@ -230,6 +250,10 @@ class _VehicleScreenState extends State<VehicleScreen> {
                 Text('Motor Gücü: ${vehicle.motorGucu}'),
                 Text('Motor Hacmi: ${vehicle.motorHacmi}'),
                 Text('Çekiş: ${vehicle.cekis}'),
+                Text(
+                    'Şehir İçi Tüketim: ${vehicle.cityConsumption?.toStringAsFixed(1) ?? 'Belirtilmemiş'} L/100km'),
+                Text(
+                    'Şehir Dışı Tüketim: ${vehicle.highwayConsumption?.toStringAsFixed(1) ?? 'Belirtilmemiş'} L/100km'),
               ],
             ),
           ),

@@ -162,55 +162,122 @@ class _MainScreenWrapperState extends State<MainScreenWrapper> {
         title: const Text('RotaApp'),
       ),
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                color:
-                    isDark ? const Color(0xFF303134) : const Color(0xFF1A73E8),
-              ),
-              child: const Text(
-                'Hoş Geldiniz',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            topRight: Radius.circular(16.0),
+            bottomRight: Radius.circular(16.0),
+          ),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage(isDark
+                  ? 'assets/images/drawer2.png'
+                  : 'assets/images/drawer.png'),
+              fit: BoxFit.cover,
+            ),
+          ),
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0, vertical: 30.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
                 ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.location_on),
-              title: const Text('Harita'),
-              selected: _selectedIndex == 0,
-              selectedColor:
-                  isDark ? const Color(0xFF8AB4F8) : const Color(0xFF1A73E8),
-              onTap: () => _onItemTapped(0),
-            ),
-            ListTile(
-              leading: const Icon(Icons.directions_car),
-              title: const Text('Araçlar'),
-              selected: _selectedIndex == 1,
-              selectedColor:
-                  isDark ? const Color(0xFF8AB4F8) : const Color(0xFF1A73E8),
-              onTap: () => _onItemTapped(1),
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Profil'),
-              selected: _selectedIndex == 2,
-              selectedColor:
-                  isDark ? const Color(0xFF8AB4F8) : const Color(0xFF1A73E8),
-              onTap: () => _onItemTapped(2),
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Ayarlar'),
-              selected: _selectedIndex == 3,
-              selectedColor:
-                  isDark ? const Color(0xFF8AB4F8) : const Color(0xFF1A73E8),
-              onTap: () => _onItemTapped(3),
-            ),
-          ],
+              const SizedBox(height: 8.0),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+                child: Card(
+                  elevation: 2.0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: const Icon(Icons.location_on),
+                    title: const Text('Harita'),
+                    selected: _selectedIndex == 0,
+                    selectedColor: const Color(0xFF435E91),
+                    onTap: () {
+                      _onItemTapped(0);
+                    },
+                  ),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+                child: Card(
+                  elevation: 2.0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: const Icon(Icons.directions_car),
+                    title: const Text('Araçlar'),
+                    selected: _selectedIndex == 1,
+                    selectedColor: const Color(0xFF435E91),
+                    onTap: () {
+                      _onItemTapped(1);
+                    },
+                  ),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+                child: Card(
+                  elevation: 2.0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: const Icon(Icons.person),
+                    title: const Text('Profil'),
+                    selected: _selectedIndex == 2,
+                    selectedColor: const Color(0xFF435E91),
+                    onTap: () {
+                      _onItemTapped(2);
+                    },
+                  ),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+                child: Card(
+                  elevation: 2.0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: const Icon(Icons.settings),
+                    title: const Text('Ayarlar'),
+                    selected: _selectedIndex == 3,
+                    selectedColor: const Color(0xFF435E91),
+                    onTap: () {
+                      _onItemTapped(3);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       body: Center(

@@ -38,6 +38,8 @@ flutter:
   assets:
     - assets/images/arkaplan2.png
     - assets/app_icon/app_icon.png
+    - assets/images/drawer.png
+    - assets/images/drawer2.png
 
 # UYGULAMA SİMGESİ (LAUNCHER ICON) AYARLARI BURADA
 flutter_launcher_icons:

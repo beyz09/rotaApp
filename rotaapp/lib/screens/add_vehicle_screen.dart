@@ -26,9 +26,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final _cekisController = TextEditingController();
 
   // cityConsumption ve highwayConsumption için opsiyonel controller'lar
-  // Vehicle modelinizde bu alanlar nullable (double?) ise ve formda olmasını istiyorsanız:
-  // final _cityConsumptionController = TextEditingController();
-  // final _highwayConsumptionController = TextEditingController();
+  final _cityConsumptionController = TextEditingController();
+  final _highwayConsumptionController = TextEditingController();
 
   @override
   void dispose() {
@@ -42,8 +41,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     _motorGucuController.dispose();
     _motorHacmiController.dispose();
     _cekisController.dispose();
-    // _cityConsumptionController.dispose(); // Eğer kullanılıyorsa
-    // _highwayConsumptionController.dispose(); // Eğer kullanılıyorsa
+    _cityConsumptionController.dispose();
+    _highwayConsumptionController.dispose();
     super.dispose();
   }
 
@@ -51,21 +50,45 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     if (_formKey.currentState!.validate()) {
       final String newId = const Uuid().v4();
 
+      final int? yil = int.tryParse(_yilController.text);
+      final double? cityConsumption =
+          double.tryParse(_cityConsumptionController.text.replaceAll(',', '.'));
+      final double? highwayConsumption = double.tryParse(
+          _highwayConsumptionController.text.replaceAll(',', '.'));
+
+      if (yil == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Lütfen geçerli bir üretim yılı girin.')),
+        );
+        return;
+      }
+
+      if ((_cityConsumptionController.text.isNotEmpty &&
+              cityConsumption == null) ||
+          (_highwayConsumptionController.text.isNotEmpty &&
+              highwayConsumption == null)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Lütfen geçerli yakıt tüketimi değerleri girin.')),
+        );
+        return;
+      }
+
       final newVehicle = Vehicle(
         id: newId,
         marka: _markaController.text,
         seri: _seriController.text,
         model: _modelController.text,
-        yil: int.tryParse(_yilController.text) ?? 0,
+        yil: yil,
         yakitTipi: _yakitTipiController.text,
         vites: _vitesController.text,
         kasaTipi: _kasaTipiController.text,
         motorGucu: _motorGucuController.text,
         motorHacmi: _motorHacmiController.text,
         cekis: _cekisController.text,
-        // cityConsumption ve highwayConsumption Vehicle modelinizde varsa:
-        // cityConsumption: double.tryParse(_cityConsumptionController.text),
-        // highwayConsumption: double.tryParse(_highwayConsumptionController.text),
+        cityConsumption: cityConsumption,
+        highwayConsumption: highwayConsumption,
       );
 
       try {
@@ -73,7 +96,19 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             .addNewVehicleToFirestore(newVehicle);
 
         if (mounted) {
-          Navigator.pop(context, true); // Başarılı ekleme sonrası true döndür
+          Navigator.pop(context, true);
+          _markaController.clear();
+          _seriController.clear();
+          _modelController.clear();
+          _yilController.clear();
+          _yakitTipiController.clear();
+          _vitesController.clear();
+          _kasaTipiController.clear();
+          _motorGucuController.clear();
+          _motorHacmiController.clear();
+          _cekisController.clear();
+          _cityConsumptionController.clear();
+          _highwayConsumptionController.clear();
         }
       } catch (error) {
         if (mounted) {
@@ -95,52 +130,64 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           key: _formKey,
           child: ListView(
             children: [
-              _buildTextFormField(controller: _markaController, labelText: 'Marka*'),
-              _buildTextFormField(controller: _seriController, labelText: 'Seri*'),
-              _buildTextFormField(controller: _modelController, labelText: 'Model*'),
+              _buildTextFormField(
+                  controller: _markaController, labelText: 'Marka*'),
+              _buildTextFormField(
+                  controller: _seriController, labelText: 'Seri*'),
+              _buildTextFormField(
+                  controller: _modelController, labelText: 'Model*'),
               _buildTextFormField(
                 controller: _yilController,
                 labelText: 'Yıl*',
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'Yıl gerekli';
-                  if (int.tryParse(value) == null || value.length != 4) return 'Geçerli bir yıl girin (örn: 2020)';
+                  if (int.tryParse(value) == null || value.length != 4)
+                    return 'Geçerli bir yıl girin (örn: 2020)';
                   return null;
                 },
               ),
-              _buildTextFormField(controller: _yakitTipiController, labelText: 'Yakıt Tipi*'),
-              _buildTextFormField(controller: _vitesController, labelText: 'Vites*'),
-              _buildTextFormField(controller: _kasaTipiController, labelText: 'Kasa Tipi*'),
-              _buildTextFormField(controller: _motorGucuController, labelText: 'Motor Gücü*'),
-              _buildTextFormField(controller: _motorHacmiController, labelText: 'Motor Hacmi*'),
-              _buildTextFormField(controller: _cekisController, labelText: 'Çekiş*'),
+              _buildTextFormField(
+                  controller: _yakitTipiController, labelText: 'Yakıt Tipi*'),
+              _buildTextFormField(
+                  controller: _vitesController, labelText: 'Vites*'),
+              _buildTextFormField(
+                  controller: _kasaTipiController, labelText: 'Kasa Tipi*'),
+              _buildTextFormField(
+                  controller: _motorGucuController, labelText: 'Motor Gücü*'),
+              _buildTextFormField(
+                  controller: _motorHacmiController, labelText: 'Motor Hacmi*'),
+              _buildTextFormField(
+                  controller: _cekisController, labelText: 'Çekiş*'),
+              _buildTextFormField(
+                controller: _cityConsumptionController,
+                labelText: 'Şehir İçi Tüketim (L/100km)',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (value) {
+                  if (value != null && value.isNotEmpty) {
+                    if (double.tryParse(value.replaceAll(',', '.')) == null) {
+                      return 'Geçerli bir sayı girin.';
+                    }
+                  }
+                  return null;
+                },
+              ),
+              _buildTextFormField(
+                controller: _highwayConsumptionController,
+                labelText: 'Şehir Dışı Tüketim (L/100km)',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                validator: (value) {
+                  if (value != null && value.isNotEmpty) {
+                    if (double.tryParse(value.replaceAll(',', '.')) == null) {
+                      return 'Geçerli bir sayı girin.';
+                    }
+                  }
+                  return null;
+                },
+              ),
               const SizedBox(height: 16),
-
-              // Eğer cityConsumption ve highwayConsumption alanlarını
-              // Vehicle modelinize eklediyseniz ve formda olmasını istiyorsanız:
-              // _buildTextFormField(
-              //   controller: _cityConsumptionController,
-              //   labelText: 'Şehir İçi Tüketim (L/100km) (Opsiyonel)',
-              //   keyboardType: TextInputType.numberWithOptions(decimal: true),
-              //   validator: (value) {
-              //     if (value != null && value.isNotEmpty && double.tryParse(value) == null) {
-              //       return 'Geçerli bir sayı giriniz';
-              //     }
-              //     return null;
-              //   },
-              // ),
-              // _buildTextFormField(
-              //   controller: _highwayConsumptionController,
-              //   labelText: 'Şehir Dışı Tüketim (L/100km) (Opsiyonel)',
-              //   keyboardType: TextInputType.numberWithOptions(decimal: true),
-              //   validator: (value) {
-              //     if (value != null && value.isNotEmpty && double.tryParse(value) == null) {
-              //       return 'Geçerli bir sayı giriniz';
-              //     }
-              //     return null;
-              //   },
-              // ),
-              // const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _submitForm,
                 style: ElevatedButton.styleFrom(
@@ -167,16 +214,20 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         controller: controller,
         decoration: InputDecoration(
           labelText: labelText,
-          border: const OutlineInputBorder(),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8.0),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
         ),
         keyboardType: keyboardType,
-        validator: validator ?? (value) {
-          if (value == null || value.isEmpty) {
-            return '$labelText alanı boş bırakılamaz';
-          }
-          return null;
-        },
+        validator: validator ??
+            (value) {
+              if (value == null || value.isEmpty) {
+                return '$labelText alanı boş bırakılamaz';
+              }
+              return null;
+            },
       ),
     );
   }
